@@ -3,7 +3,11 @@ const CACHE_NAME = 'my-fit-mini-v1';
 const ASSETS = [
   './',
   './index.html',
-  './manifest.webmanifest'
+  './manifest.webmanifest',
+  './styles.css',
+  './data.js',
+  './app.js',
+  './sw.js'
 ];
 
 self.addEventListener('install', event => {

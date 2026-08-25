@@ -1,0 +1,9 @@
+{
+  "name": "My Fit Mini",
+  "short_name": "My Fit",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f5f1",
+  "theme_color": "#222222",
+  "lang": "vi"
+}

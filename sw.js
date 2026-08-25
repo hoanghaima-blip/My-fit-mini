@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-fit-mini-v1';
+const CACHE_NAME = 'my-fit-mini-v2';
 
 const ASSETS = [
   './',

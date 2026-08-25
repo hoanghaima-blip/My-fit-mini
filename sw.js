@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-fit-mini-v2';
+const CACHE_NAME = 'my-fit-mini-v3';
 
 const ASSETS = [
   './',
@@ -6,6 +6,7 @@ const ASSETS = [
   './manifest.webmanifest',
   './styles.css',
   './data.js',
+  './images.js',
   './app.js',
   './sw.js'
 ];

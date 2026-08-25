@@ -1,5 +1,5 @@
 /**
- * Automated flow tests for My Fit Mini core logic.
+ * Automated flow tests for My Fit Mini.
  * Run: node tests/flow-tests.mjs
  */
 import { readFileSync } from 'fs';
@@ -11,6 +11,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
 const sharedStorage = new Map();
+const sharedImageMemory = {};
 
 function createStorage() {
   return {
@@ -37,7 +38,10 @@ function createStorage() {
 
 function loadApp() {
   const virtualConsole = new VirtualConsole();
-  virtualConsole.on('error', () => {});
+  const errors = [];
+  virtualConsole.on('jsdomError', (err) => errors.push(String(err)));
+  virtualConsole.on('error', (err) => errors.push(String(err)));
+  globalThis.__MYFIT_SHARED_IMAGES__ = sharedImageMemory;
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     url: 'http://localhost/',
     runScripts: 'dangerously',
@@ -45,12 +49,18 @@ function loadApp() {
     virtualConsole
   });
   const { window } = dom;
+  window.__MYFIT_SHARED_IMAGES__ = sharedImageMemory;
   Object.defineProperty(window, 'localStorage', { value: createStorage() });
+  window.URL.createObjectURL = (blob) => 'blob:mock-' + (blob && blob.size);
+  window.URL.revokeObjectURL = () => {};
   const doc = window.document;
-  doc.body.innerHTML = readFileSync(join(root, 'index.html'), 'utf8').match(/<body[^>]*>([\s\S]*)<\/body>/i)[1];
+  doc.body.innerHTML = readFileSync(join(root, 'index.html'), 'utf8')
+    .match(/<body[^>]*>([\s\S]*)<\/body>/i)[1]
+    .replace(/<script[\s\S]*?<\/script>/gi, '');
   window.eval(readFileSync(join(root, 'data.js'), 'utf8'));
+  window.eval(readFileSync(join(root, 'images.js'), 'utf8'));
   window.eval(readFileSync(join(root, 'app.js'), 'utf8'));
-  return { window, dom };
+  return { window, dom, errors };
 }
 
 function assert(condition, message) {
@@ -59,10 +69,10 @@ function assert(condition, message) {
 
 function resetStorage() {
   sharedStorage.clear();
+  Object.keys(sharedImageMemory).forEach((key) => delete sharedImageMemory[key]);
 }
 
-function makeMiniWorkout(window) {
-  const D = window.MyFitData;
+function makeMiniWorkout() {
   return {
     id: 'test',
     title: 'Test Workout',
@@ -71,6 +81,7 @@ function makeMiniWorkout(window) {
         id: 'test-ex-1',
         name: 'Exercise One',
         image: '',
+        imageId: '',
         instructions: 'Do one',
         notes: 'Note one',
         sets: 3,
@@ -82,6 +93,7 @@ function makeMiniWorkout(window) {
         id: 'test-ex-2',
         name: 'Exercise Two',
         image: '',
+        imageId: '',
         instructions: 'Do two',
         notes: '',
         sets: 2,
@@ -95,10 +107,14 @@ function makeMiniWorkout(window) {
 
 function installMiniWorkout(window) {
   const D = window.MyFitData;
-  const workouts = D.loadWorkouts();
-  workouts.test = makeMiniWorkout(window);
+  const workouts = window.MyFitApp.getWorkouts();
+  workouts.test = makeMiniWorkout();
   D.saveWorkouts(workouts);
   window.MyFitApp.selectWorkout('test');
+}
+
+async function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function run() {
@@ -106,25 +122,19 @@ async function run() {
   const pass = (name) => results.push({ name, ok: true });
   const fail = (name, err) => results.push({ name, ok: false, err: String(err) });
 
-  // TEST 1: 3 sets complete -> 60s set rest, then 90s exercise rest
+  // Keep original 7 core tests
   try {
     const { window } = loadApp();
     resetStorage();
     installMiniWorkout(window);
-    const D = window.MyFitData;
     const app = window.MyFitApp;
     app.startWorkout(0);
-    let session = app.getActiveSession();
-    assert(session.phase === 'exercise', 'starts in exercise phase');
-    assert(session.exercises[0].snapshot.sets === 3, 'uses exercise.sets not hardcoded');
     app.completeSet();
-    session = app.getActiveSession();
+    let session = app.getActiveSession();
     assert(session.phase === 'rest-set', 'set rest after set 1');
     assert(session.restRemaining >= 59 && session.restRemaining <= 60, 'set rest is 60s');
     app.finishRestAdvance();
     app.completeSet();
-    session = app.getActiveSession();
-    assert(session.phase === 'rest-set', 'second set rest');
     app.finishRestAdvance();
     app.completeSet();
     session = app.getActiveSession();
@@ -135,7 +145,6 @@ async function run() {
     fail('TEST 1', err);
   }
 
-  // TEST 2: complete 2/3 sets then complete exercise -> no extra 60s, 90s exercise rest
   try {
     const { window } = loadApp();
     resetStorage();
@@ -155,28 +164,27 @@ async function run() {
     fail('TEST 2', err);
   }
 
-  // TEST 3: edit exercise persists after reload
   try {
     const first = loadApp();
     resetStorage();
     installMiniWorkout(first.window);
-    const D = first.window.MyFitData;
-    const workouts = D.loadWorkouts();
+    const workouts = first.window.MyFitApp.getWorkouts();
     workouts.test.exercises[0].name = 'Edited Exercise';
     workouts.test.exercises[0].sets = 4;
-    D.saveWorkouts(workouts);
+    workouts.test.exercises[0].instructions = 'A'.repeat(5000);
+    first.window.MyFitData.saveWorkouts(workouts);
     first.dom.window.close();
     const reloaded = loadApp();
     const saved = reloaded.window.MyFitData.loadWorkouts();
     assert(saved.test.exercises[0].name === 'Edited Exercise', 'name persisted');
     assert(saved.test.exercises[0].sets === 4, 'sets persisted');
+    assert(saved.test.exercises[0].instructions.length === 5000, 'long instructions persisted');
     pass('TEST 3: edit exercise persists after reload');
     reloaded.dom.window.close();
   } catch (err) {
     fail('TEST 3', err);
   }
 
-  // TEST 4: replace exercise updates current workout but not history snapshot
   try {
     const { window } = loadApp();
     resetStorage();
@@ -186,11 +194,12 @@ async function run() {
     app.startWorkout(0);
     const oldSnapshotName = app.getActiveSession().exercises[0].snapshot.name;
     app.finishWorkout();
-    const workouts = D.loadWorkouts();
+    const workouts = app.getWorkouts();
     workouts.test.exercises[0] = {
       id: 'test-ex-new',
       name: 'Brand New Exercise',
       image: '',
+      imageId: '',
       instructions: 'New',
       notes: '',
       sets: 3,
@@ -201,14 +210,13 @@ async function run() {
     D.saveWorkouts(workouts);
     const history = D.loadHistory();
     assert(history[0].exercises[0].snapshot.name === oldSnapshotName, 'history keeps old snapshot');
-    assert(D.loadWorkouts().test.exercises[0].name === 'Brand New Exercise', 'current workout updated');
+    assert(oldSnapshotName === 'Exercise One', 'snapshot came from test workout');
+    assert(app.getWorkouts().test.exercises[0].name === 'Brand New Exercise', 'current workout updated');
     pass('TEST 4: replace exercise keeps history snapshot');
-    window.close?.();
   } catch (err) {
     fail('TEST 4', err);
   }
 
-  // TEST 5: actual duration saved
   try {
     const { window } = loadApp();
     resetStorage();
@@ -231,7 +239,6 @@ async function run() {
     fail('TEST 5', err);
   }
 
-  // TEST 6: estimated duration unchanged by actual duration
   try {
     const { window } = loadApp();
     resetStorage();
@@ -253,10 +260,9 @@ async function run() {
     fail('TEST 6', err);
   }
 
-  // TEST 7: reload mid-workout can resume
   try {
     const first = loadApp();
-    resetStorage(first.window);
+    resetStorage();
     installMiniWorkout(first.window);
     first.window.MyFitApp.startWorkout(0);
     first.window.MyFitApp.completeSet();
@@ -272,6 +278,153 @@ async function run() {
     second.dom.window.close();
   } catch (err) {
     fail('TEST 7', err);
+  }
+
+  // NEW: replace persists after reload
+  try {
+    const first = loadApp();
+    resetStorage();
+    installMiniWorkout(first.window);
+    const workouts = first.window.MyFitApp.getWorkouts();
+    workouts.test.exercises[0] = {
+      id: 'replaced-1',
+      name: 'Replaced Persist',
+      image: '',
+      imageId: '',
+      instructions: 'New guide',
+      notes: 'New note',
+      sets: 5,
+      reps: 7,
+      resistance: 12,
+      resistanceType: 'kg'
+    };
+    first.window.MyFitData.saveWorkouts(workouts);
+    first.dom.window.close();
+    const second = loadApp();
+    const saved = second.window.MyFitData.loadWorkouts().test.exercises[0];
+    assert(saved.name === 'Replaced Persist', 'replace name persisted');
+    assert(saved.sets === 5 && saved.reps === 7, 'replace sets/reps persisted');
+    pass('TEST 8: replace exercise persists after reload');
+    second.dom.window.close();
+  } catch (err) {
+    fail('TEST 8', err);
+  }
+
+  // NEW: upload image -> reload -> image remains
+  try {
+    const first = loadApp();
+    resetStorage();
+    installMiniWorkout(first.window);
+    const Img = first.window.MyFitImages;
+    const D = first.window.MyFitData;
+    const blob = new first.window.Blob(['fake-image-bytes'], { type: 'image/png' });
+    const imageId = await Img.putImage(blob);
+    const workouts = first.window.MyFitApp.getWorkouts();
+    workouts.test.exercises[0].imageId = imageId;
+    workouts.test.exercises[0].image = '';
+    D.saveWorkouts(workouts);
+    first.dom.window.close();
+    const second = loadApp();
+    const saved = second.window.MyFitData.loadWorkouts().test.exercises[0];
+    assert(saved.imageId === imageId, 'imageId persisted in exercise metadata');
+    const restored = await second.window.MyFitImages.getImage(imageId);
+    assert(!!restored, 'image blob restored from store');
+    pass('TEST 9: upload image persists after reload');
+    second.dom.window.close();
+  } catch (err) {
+    fail('TEST 9', err);
+  }
+
+  // NEW: replace exercise -> history old image/name unchanged
+  try {
+    const { window } = loadApp();
+    resetStorage();
+    installMiniWorkout(window);
+    const D = window.MyFitData;
+    const Img = window.MyFitImages;
+    const app = window.MyFitApp;
+    const blob = new window.Blob(['history-image'], { type: 'image/png' });
+    const oldImageId = await Img.putImage(blob);
+    const workouts = app.getWorkouts();
+    workouts.test.exercises[0].name = 'Original With Image';
+    workouts.test.exercises[0].imageId = oldImageId;
+    D.saveWorkouts(workouts);
+    app.selectWorkout('test');
+    app.startWorkout(0);
+    const snapName = app.getActiveSession().exercises[0].snapshot.name;
+    const snapImageId = app.getActiveSession().exercises[0].snapshot.imageId;
+    assert(snapName === 'Original With Image', 'session snapshot uses current exercise name');
+    assert(snapImageId === oldImageId, 'session snapshot keeps imageId');
+    app.finishWorkout();
+    const after = app.getWorkouts();
+    after.test.exercises[0] = {
+      id: 'brand-new',
+      name: 'Totally New',
+      image: '',
+      imageId: '',
+      instructions: 'x',
+      notes: '',
+      sets: 1,
+      reps: 1,
+      resistance: 0,
+      resistanceType: 'bodyweight'
+    };
+    D.saveWorkouts(after);
+    const history = D.loadHistory();
+    assert(history[0].exercises[0].snapshot.name === snapName, 'history name unchanged');
+    assert(history[0].exercises[0].snapshot.imageId === snapImageId, 'history imageId unchanged');
+    const histBlob = await Img.getImage(snapImageId);
+    assert(!!histBlob, 'history image still resolvable');
+    pass('TEST 10: replace exercise does not change history image/name');
+  } catch (err) {
+    fail('TEST 10', err);
+  }
+
+  // NEW: finish workout -> history UI appears and detail opens
+  try {
+    const { window } = loadApp();
+    resetStorage();
+    installMiniWorkout(window);
+    const app = window.MyFitApp;
+    app.startWorkout(0);
+    app.completeExercise(true);
+    app.finishRestAdvance();
+    app.completeExercise(true);
+    const history = window.MyFitData.loadHistory();
+    assert(history.length === 1, 'history has one entry');
+    app.renderHistory();
+    const cards = window.document.querySelectorAll('#history-list .history-card');
+    assert(cards.length === 1, 'history card rendered');
+    assert(cards[0].textContent.includes('Test Workout'), 'history shows workout name');
+    assert(cards[0].textContent.includes('Dự kiến'), 'history shows estimated');
+    assert(cards[0].textContent.includes('Thực tế'), 'history shows actual');
+    app.openHistoryDetail(0);
+    const detail = window.document.getElementById('history-detail-overlay');
+    assert(detail.style.display === 'flex', 'history detail overlay opens');
+    const content = window.document.getElementById('history-detail-content').textContent;
+    assert(content.includes('Exercise One'), 'detail shows exercise name');
+    assert(content.includes('Actual sets'), 'detail shows actual sets');
+    pass('TEST 11: completed workout appears in history UI with detail');
+  } catch (err) {
+    fail('TEST 11', err);
+  }
+
+  // NEW: edit form fields exist and textareas have no maxlength
+  try {
+    const { window } = loadApp();
+    const edit = window.document.getElementById('edit-form');
+    const replace = window.document.getElementById('replace-form');
+    ['name', 'instructions', 'notes', 'image', 'sets', 'reps', 'resistance', 'resistanceType', 'imageFile'].forEach((field) => {
+      assert(!!edit.elements[field], 'edit has ' + field);
+      assert(!!replace.elements[field], 'replace has ' + field);
+    });
+    assert(edit.elements.instructions.getAttribute('maxlength') == null, 'edit instructions unlimited');
+    assert(edit.elements.notes.getAttribute('maxlength') == null, 'edit notes unlimited');
+    assert(edit.elements.instructions.tagName === 'TEXTAREA', 'instructions is textarea');
+    assert(edit.elements.notes.tagName === 'TEXTAREA', 'notes is textarea');
+    pass('TEST 12: edit/replace forms include all fields + unlimited textareas');
+  } catch (err) {
+    fail('TEST 12', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

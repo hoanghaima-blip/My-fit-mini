@@ -2,17 +2,23 @@
   'use strict';
 
   var D = window.MyFitData;
+  var Img = window.MyFitImages;
   var workouts = D.loadWorkouts();
   var currentWorkoutId = D.loadLastDay() || 'a';
   var selectedExerciseIndex = 0;
   var activeSession = D.loadActiveSession();
   var restTimerId = null;
   var resumePromptShown = false;
+  var formImageState = {
+    edit: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
+    replace: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' }
+  };
 
   var els = {
     title: document.getElementById('hero-title'),
     meta: document.getElementById('hero-meta'),
     list: document.getElementById('exercise-list'),
+    historyList: document.getElementById('history-list'),
     week: document.getElementById('week-calendar'),
     resumeBanner: document.getElementById('resume-banner'),
     detailOverlay: document.getElementById('detail-overlay'),
@@ -38,7 +44,9 @@
     editOverlay: document.getElementById('edit-overlay'),
     replaceOverlay: document.getElementById('replace-overlay'),
     editForm: document.getElementById('edit-form'),
-    replaceForm: document.getElementById('replace-form')
+    replaceForm: document.getElementById('replace-form'),
+    historyDetailOverlay: document.getElementById('history-detail-overlay'),
+    historyDetailContent: document.getElementById('history-detail-content')
   };
 
   function getWorkout(workoutId) {
@@ -75,6 +83,24 @@
     return activeSession.exercises[activeSession.currentExerciseIndex] || null;
   }
 
+  function setImageElement(imgEl, src) {
+    if (!imgEl) return;
+    if (src) {
+      imgEl.src = src;
+      imgEl.style.display = 'block';
+    } else {
+      imgEl.removeAttribute('src');
+      imgEl.style.display = 'none';
+    }
+  }
+
+  function applyImageToElement(target, imageRef) {
+    return Img.resolveImageSrc(imageRef).then(function (src) {
+      setImageElement(target, src);
+      return src;
+    });
+  }
+
   function renderHero() {
     var workout = getWorkout(currentWorkoutId);
     if (!workout) return;
@@ -84,11 +110,8 @@
     D.saveLastDay(currentWorkoutId);
   }
 
-  function renderExerciseImage(image, className) {
-    if (image) {
-      return '<img class="' + className + '" src="' + escapeHtml(image) + '" alt="">';
-    }
-    return '<div class="' + className + ' placeholder">🏋️</div>';
+  function placeholderImageHtml(className) {
+    return '<div class="' + className + ' placeholder" data-image-slot>🏋️</div>';
   }
 
   function renderList() {
@@ -98,7 +121,7 @@
       return (
         '<div class="card">' +
           '<div class="card-top">' +
-            renderExerciseImage(exercise.image, 'card-image') +
+            placeholderImageHtml('card-image') +
             '<div class="card-body">' +
               '<div class="name">' + (index + 1) + '. ' + escapeHtml(exercise.name) + '</div>' +
               '<div class="meta">' + escapeHtml(D.formatExerciseMeta(exercise)) + '</div>' +
@@ -114,6 +137,101 @@
         '</div>'
       );
     }).join('');
+
+    var cards = els.list.querySelectorAll('.card');
+    workout.exercises.forEach(function (exercise, index) {
+      var slot = cards[index] && cards[index].querySelector('[data-image-slot]');
+      if (!slot) return;
+      Img.resolveImageSrc(exercise).then(function (src) {
+        if (!src || !slot.parentNode) return;
+        var img = document.createElement('img');
+        img.className = 'card-image';
+        img.alt = '';
+        img.src = src;
+        slot.replaceWith(img);
+      });
+    });
+  }
+
+  function renderHistory() {
+    var history = D.loadHistory();
+    if (!history.length) {
+      els.historyList.innerHTML = '<div class="history-empty">Chưa có buổi tập nào được lưu. Hoàn thành một workout để xem lịch sử tại đây.</div>';
+      return;
+    }
+    els.historyList.innerHTML = history.map(function (entry, index) {
+      var summary = D.summarizeHistoryEntry(entry);
+      return (
+        '<div class="card history-card" data-history-index="' + index + '">' +
+          '<div class="name">' + escapeHtml(entry.workoutName) + '</div>' +
+          '<div class="meta">' + escapeHtml(D.formatDateVi(entry.date)) + ' · ' +
+            escapeHtml(D.formatTime(entry.startTime)) + ' – ' + escapeHtml(D.formatTime(entry.endTime)) +
+          '</div>' +
+          '<div class="history-row"><span>Dự kiến</span><strong>' + escapeHtml(D.formatClockDuration(entry.estimatedDuration)) + '</strong></div>' +
+          '<div class="history-row"><span>Thực tế</span><strong>' + escapeHtml(D.formatClockDuration(entry.actualDuration)) + '</strong></div>' +
+          '<div class="history-row"><span>Bài tập</span><strong>' + summary.exerciseCount + '</strong></div>' +
+          '<div class="history-row"><span>Sets (planned / actual)</span><strong>' + summary.plannedSets + ' / ' + summary.actualSets + '</strong></div>' +
+          '<span class="badge">Xem chi tiết</span>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function openHistoryDetail(index) {
+    var history = D.loadHistory();
+    var entry = history[index];
+    if (!entry) return;
+    var summary = D.summarizeHistoryEntry(entry);
+    var html =
+      '<div class="progress">Chi tiết buổi tập</div>' +
+      '<h2>' + escapeHtml(entry.workoutName) + '</h2>' +
+      '<div class="meta">' + escapeHtml(D.formatDateVi(entry.date)) + '</div>' +
+      '<div class="history-row"><span>Bắt đầu</span><strong>' + escapeHtml(D.formatTime(entry.startTime)) + '</strong></div>' +
+      '<div class="history-row"><span>Kết thúc</span><strong>' + escapeHtml(D.formatTime(entry.endTime)) + '</strong></div>' +
+      '<div class="history-row"><span>Dự kiến</span><strong>' + escapeHtml(D.formatClockDuration(entry.estimatedDuration)) + '</strong></div>' +
+      '<div class="history-row"><span>Thực tế</span><strong>' + escapeHtml(D.formatClockDuration(entry.actualDuration)) + '</strong></div>' +
+      '<div class="history-row"><span>Bài tập</span><strong>' + summary.exerciseCount + '</strong></div>' +
+      '<div class="history-row"><span>Sets planned / actual</span><strong>' + summary.plannedSets + ' / ' + summary.actualSets + '</strong></div>' +
+      '<div class="history-detail-list">';
+
+    entry.exercises.forEach(function (item, i) {
+      var snap = item.snapshot || {};
+      var status = item.completionStatus || 'pending';
+      var resistance = {
+        resistance: item.actualResistance != null ? item.actualResistance : snap.resistance,
+        resistanceType: item.plannedResistanceType || snap.resistanceType || 'kg'
+      };
+      html +=
+        '<div class="history-exercise" data-history-ex="' + i + '">' +
+          placeholderImageHtml('card-image') +
+          '<div class="name">' + (i + 1) + '. ' + escapeHtml(snap.name || 'Bài tập') + '</div>' +
+          '<div class="meta">Planned: ' + (item.plannedSets || snap.sets || 0) + ' × ' + (item.plannedReps || snap.reps || 0) + '</div>' +
+          '<div class="meta">Actual sets: ' + (item.actualSetsCompleted || 0) + '</div>' +
+          '<div class="meta">Resistance: ' + escapeHtml(D.formatResistance(resistance)) + '</div>' +
+          '<span class="status-pill ' + escapeHtml(status) + '">' + escapeHtml(D.completionStatusLabel(status)) + '</span>' +
+        '</div>';
+    });
+    html += '</div>';
+    els.historyDetailContent.innerHTML = html;
+    showOverlay(els.historyDetailOverlay);
+
+    entry.exercises.forEach(function (item, i) {
+      var block = els.historyDetailContent.querySelector('[data-history-ex="' + i + '"]');
+      var slot = block && block.querySelector('[data-image-slot]');
+      if (!slot) return;
+      Img.resolveImageSrc(item.snapshot || {}).then(function (src) {
+        if (!src || !slot.parentNode) return;
+        var img = document.createElement('img');
+        img.className = 'card-image';
+        img.alt = '';
+        img.src = src;
+        slot.replaceWith(img);
+      });
+    });
+  }
+
+  function closeHistoryDetail() {
+    hideOverlay(els.historyDetailOverlay);
   }
 
   function renderWeek() {
@@ -141,6 +259,7 @@
     renderList();
     renderWeek();
     renderTabs();
+    renderHistory();
   }
 
   function selectWorkout(workoutId) {
@@ -158,12 +277,7 @@
     els.dmeta.textContent = D.formatExerciseMeta(exercise);
     els.dnote.textContent = exercise.notes || '';
     els.dinstructions.textContent = exercise.instructions || '';
-    if (exercise.image) {
-      els.dimage.src = exercise.image;
-      els.dimage.style.display = 'block';
-    } else {
-      els.dimage.style.display = 'none';
-    }
+    applyImageToElement(els.dimage, exercise);
     showOverlay(els.detailOverlay);
   }
 
@@ -171,29 +285,150 @@
     hideOverlay(els.detailOverlay);
   }
 
-  function fillExerciseForm(form, exercise) {
-    form.name.value = exercise.name;
-    form.instructions.value = exercise.instructions || '';
-    form.notes.value = exercise.notes || '';
-    form.image.value = exercise.image || '';
-    form.sets.value = exercise.sets;
-    form.reps.value = exercise.reps;
-    form.resistance.value = exercise.resistance;
-    form.resistanceType.value = exercise.resistanceType;
+  function getFormMode(form) {
+    return form === els.editForm ? 'edit' : 'replace';
+  }
+
+  function getFormPreview(form) {
+    return form.querySelector('[data-role="preview"]');
+  }
+
+  function resetFormImageState(mode) {
+    var state = formImageState[mode];
+    if (state.previewUrl && state.previewUrl.indexOf('blob:') === 0) {
+      URL.revokeObjectURL(state.previewUrl);
+    }
+    formImageState[mode] = {
+      pendingFile: null,
+      clearImage: false,
+      existingImageId: '',
+      existingImage: '',
+      previewUrl: ''
+    };
+  }
+
+  function showFormPreview(form, src) {
+    var preview = getFormPreview(form);
+    if (!preview) return;
+    if (src) {
+      preview.src = src;
+      preview.style.display = 'block';
+    } else {
+      preview.removeAttribute('src');
+      preview.style.display = 'none';
+    }
+  }
+
+  function bindImagePicker(form) {
+    var pickBtn = form.querySelector('[data-role="pick"]');
+    var clearBtn = form.querySelector('[data-role="clear"]');
+    var fileInput = form.elements.imageFile;
+    var urlInput = form.elements.image;
+    if (pickBtn && fileInput) {
+      pickBtn.addEventListener('click', function () {
+        fileInput.click();
+      });
+    }
+    if (fileInput) {
+      fileInput.addEventListener('change', function () {
+        var mode = getFormMode(form);
+        var file = fileInput.files && fileInput.files[0];
+        if (!file) return;
+        formImageState[mode].pendingFile = file;
+        formImageState[mode].clearImage = false;
+        urlInput.value = '';
+        if (formImageState[mode].previewUrl && formImageState[mode].previewUrl.indexOf('blob:') === 0) {
+          URL.revokeObjectURL(formImageState[mode].previewUrl);
+        }
+        var previewUrl = URL.createObjectURL(file);
+        formImageState[mode].previewUrl = previewUrl;
+        showFormPreview(form, previewUrl);
+      });
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        var mode = getFormMode(form);
+        formImageState[mode].pendingFile = null;
+        formImageState[mode].clearImage = true;
+        formImageState[mode].existingImageId = '';
+        formImageState[mode].existingImage = '';
+        urlInput.value = '';
+        if (fileInput) fileInput.value = '';
+        showFormPreview(form, '');
+      });
+    }
+    if (urlInput) {
+      urlInput.addEventListener('input', function () {
+        var mode = getFormMode(form);
+        if (!urlInput.value.trim()) return;
+        formImageState[mode].pendingFile = null;
+        formImageState[mode].clearImage = false;
+        formImageState[mode].existingImageId = '';
+        showFormPreview(form, urlInput.value.trim());
+      });
+    }
   }
 
   function readExerciseForm(form, existingId, workoutId) {
-    return {
-      id: existingId || D.makeExerciseId(workoutId, form.name.value.trim()),
-      name: form.name.value,
-      image: form.image.value.trim(),
-      instructions: form.instructions.value,
-      notes: form.notes.value,
-      sets: Math.max(1, parseInt(form.sets.value, 10) || 1),
-      reps: Math.max(1, parseInt(form.reps.value, 10) || 1),
-      resistance: Math.max(0, parseFloat(form.resistance.value) || 0),
-      resistanceType: form.resistanceType.value
+    var mode = getFormMode(form);
+    var state = formImageState[mode];
+    var fields = form.elements;
+    var base = {
+      id: existingId || D.makeExerciseId(workoutId, fields.name.value.trim()),
+      name: fields.name.value,
+      image: '',
+      imageId: '',
+      instructions: fields.instructions.value,
+      notes: fields.notes.value,
+      sets: Math.max(1, parseInt(fields.sets.value, 10) || 1),
+      reps: Math.max(1, parseInt(fields.reps.value, 10) || 1),
+      resistance: Math.max(0, parseFloat(fields.resistance.value) || 0),
+      resistanceType: fields.resistanceType.value
     };
+
+    if (state.pendingFile) {
+      return Img.putImage(state.pendingFile).then(function (imageId) {
+        base.imageId = imageId;
+        base.image = '';
+        return base;
+      });
+    }
+
+    if (state.clearImage) {
+      return Promise.resolve(base);
+    }
+
+    var url = fields.image.value.trim();
+    if (url) {
+      base.image = url;
+      base.imageId = '';
+      return Promise.resolve(base);
+    }
+
+    base.image = state.existingImage || '';
+    base.imageId = state.existingImageId || '';
+    return Promise.resolve(base);
+  }
+
+  function fillExerciseForm(form, exercise) {
+    var mode = getFormMode(form);
+    var fields = form.elements;
+    resetFormImageState(mode);
+    fields.name.value = exercise.name;
+    fields.instructions.value = exercise.instructions || '';
+    fields.notes.value = exercise.notes || '';
+    fields.image.value = exercise.image || '';
+    fields.sets.value = exercise.sets;
+    fields.reps.value = exercise.reps;
+    fields.resistance.value = exercise.resistance;
+    fields.resistanceType.value = exercise.resistanceType;
+    if (fields.imageFile) fields.imageFile.value = '';
+    formImageState[mode].existingImageId = exercise.imageId || '';
+    formImageState[mode].existingImage = exercise.image || '';
+    Img.resolveImageSrc(exercise).then(function (src) {
+      formImageState[mode].previewUrl = src;
+      showFormPreview(form, src);
+    });
   }
 
   function openEdit(index) {
@@ -210,18 +445,24 @@
     event.preventDefault();
     var workout = getWorkout(currentWorkoutId);
     var current = workout.exercises[selectedExerciseIndex];
-    workout.exercises[selectedExerciseIndex] = readExerciseForm(els.editForm, current.id, currentWorkoutId);
-    persistWorkouts();
-    closeEdit();
-    renderAll();
+    readExerciseForm(els.editForm, current.id, currentWorkoutId).then(function (exercise) {
+      workout.exercises[selectedExerciseIndex] = exercise;
+      persistWorkouts();
+      closeEdit();
+      renderAll();
+    }).catch(function (err) {
+      console.error('Failed to save exercise image', err);
+    });
   }
 
   function openReplace(index) {
     selectedExerciseIndex = index;
     els.replaceForm.reset();
-    els.replaceForm.resistanceType.value = 'kg';
-    els.replaceForm.sets.value = 3;
-    els.replaceForm.reps.value = 10;
+    resetFormImageState('replace');
+    els.replaceForm.elements.resistanceType.value = 'kg';
+    els.replaceForm.elements.sets.value = 3;
+    els.replaceForm.elements.reps.value = 10;
+    showFormPreview(els.replaceForm, '');
     showOverlay(els.replaceOverlay);
   }
 
@@ -232,11 +473,14 @@
   function saveReplace(event) {
     event.preventDefault();
     var workout = getWorkout(currentWorkoutId);
-    var replacement = readExerciseForm(els.replaceForm, null, currentWorkoutId);
-    workout.exercises[selectedExerciseIndex] = replacement;
-    persistWorkouts();
-    closeReplace();
-    renderAll();
+    readExerciseForm(els.replaceForm, null, currentWorkoutId).then(function (replacement) {
+      workout.exercises[selectedExerciseIndex] = replacement;
+      persistWorkouts();
+      closeReplace();
+      renderAll();
+    }).catch(function (err) {
+      console.error('Failed to replace exercise image', err);
+    });
   }
 
   function clearRestTimer() {
@@ -339,12 +583,7 @@
     els.wset.textContent = [snap.instructions, snap.notes].filter(Boolean).join('\n\n');
     els.wsetDisplay.textContent = 'SET ' + activeSession.currentSet + ' / ' + snap.sets;
     els.wrepsDisplay.textContent = snap.reps + ' REPS';
-    if (snap.image) {
-      els.wimage.src = snap.image;
-      els.wimage.style.display = 'block';
-    } else {
-      els.wimage.style.display = 'none';
-    }
+    applyImageToElement(els.wimage, snap);
     hideOverlay(els.restOverlay);
     hideOverlay(els.completionOverlay);
     showOverlay(els.workoutOverlay, 'flex');
@@ -432,6 +671,7 @@
     showOverlay(els.completionOverlay, 'flex');
     activeSession = null;
     D.saveActiveSession(null);
+    renderHistory();
   }
 
   function closeWorkout() {
@@ -494,6 +734,12 @@
       if (target.dataset.action === 'replace') openReplace(index);
     });
 
+    els.historyList.addEventListener('click', function (event) {
+      var card = event.target.closest('[data-history-index]');
+      if (!card) return;
+      openHistoryDetail(parseInt(card.dataset.historyIndex, 10));
+    });
+
     els.week.addEventListener('click', function (event) {
       var dayEl = event.target.closest('.day.clickable');
       if (!dayEl) return;
@@ -505,8 +751,11 @@
     document.getElementById('detail-start-btn').addEventListener('click', startSelectedWorkout);
     document.getElementById('edit-close-btn').addEventListener('click', closeEdit);
     document.getElementById('replace-close-btn').addEventListener('click', closeReplace);
+    document.getElementById('history-detail-close-btn').addEventListener('click', closeHistoryDetail);
     els.editForm.addEventListener('submit', saveEdit);
     els.replaceForm.addEventListener('submit', saveReplace);
+    bindImagePicker(els.editForm);
+    bindImagePicker(els.replaceForm);
     document.getElementById('complete-set-btn').addEventListener('click', completeSet);
     document.getElementById('complete-exercise-btn').addEventListener('click', function () {
       completeExercise(true);
@@ -538,11 +787,15 @@
     finishWorkout: finishWorkout,
     saveWorkouts: persistWorkouts,
     renderAll: renderAll,
+    renderHistory: renderHistory,
+    openHistoryDetail: openHistoryDetail,
     beginRest: beginRest,
     tickRest: tickRest,
     finishRestAdvance: finishRestAdvance,
     showWorkoutView: showWorkoutView,
-    continueWorkout: continueWorkout
+    continueWorkout: continueWorkout,
+    openEdit: openEdit,
+    openReplace: openReplace
   };
 
   init();

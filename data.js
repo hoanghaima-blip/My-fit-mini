@@ -70,6 +70,7 @@
       id: makeExerciseId(workoutId, legacyRow[0]),
       name: legacyRow[0],
       image: '',
+      imageId: '',
       instructions: legacyRow[3] || '',
       notes: '',
       sets: parsed.sets,
@@ -159,11 +160,36 @@
     return migrated;
   }
 
+  function normalizeExercise(exercise, workoutId) {
+    if (!exercise || typeof exercise !== 'object') return exercise;
+    if (!exercise.id) exercise.id = makeExerciseId(workoutId, exercise.name || 'exercise');
+    if (exercise.imageId === undefined) exercise.imageId = '';
+    if (exercise.image === undefined) exercise.image = '';
+    if (exercise.instructions === undefined) exercise.instructions = '';
+    if (exercise.notes === undefined) exercise.notes = '';
+    exercise.sets = Math.max(1, parseInt(exercise.sets, 10) || 1);
+    exercise.reps = Math.max(1, parseInt(exercise.reps, 10) || 1);
+    exercise.resistance = Math.max(0, parseFloat(exercise.resistance) || 0);
+    if (!exercise.resistanceType) exercise.resistanceType = 'kg';
+    return exercise;
+  }
+
+  function normalizeWorkouts(workouts) {
+    Object.keys(workouts || {}).forEach(function (workoutId) {
+      var workout = workouts[workoutId];
+      if (!workout || !workout.exercises) return;
+      workout.exercises = workout.exercises.map(function (exercise) {
+        return normalizeExercise(exercise, workoutId);
+      });
+    });
+    return workouts;
+  }
+
   function loadWorkouts() {
     var stored = readJson(STORAGE_KEYS.workouts, null);
     var migrated = migrateLegacyWorkouts(stored);
-    if (migrated) return migrated;
-    return clone(DEFAULT_WORKOUTS);
+    if (migrated) return normalizeWorkouts(migrated);
+    return normalizeWorkouts(clone(DEFAULT_WORKOUTS));
   }
 
   function saveWorkouts(workouts) {
@@ -234,12 +260,47 @@
       id: exercise.id,
       name: exercise.name,
       image: exercise.image || '',
+      imageId: exercise.imageId || '',
       instructions: exercise.instructions || '',
       notes: exercise.notes || '',
       sets: exercise.sets,
       reps: exercise.reps,
       resistance: exercise.resistance,
       resistanceType: exercise.resistanceType
+    };
+  }
+
+  function formatTime(iso) {
+    if (!iso) return '—';
+    var date = new Date(iso);
+    if (isNaN(date.getTime())) return '—';
+    return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
+  }
+
+  function formatDateVi(isoDate) {
+    if (!isoDate) return '—';
+    var parts = String(isoDate).split('-');
+    if (parts.length !== 3) return isoDate;
+    return parts[2] + '/' + parts[1] + '/' + parts[0];
+  }
+
+  function completionStatusLabel(status) {
+    if (status === 'completed') return 'Hoàn thành';
+    if (status === 'in-progress') return 'Đang tập';
+    return 'Chưa tập';
+  }
+
+  function summarizeHistoryEntry(entry) {
+    var plannedSets = 0;
+    var actualSets = 0;
+    (entry.exercises || []).forEach(function (item) {
+      plannedSets += item.plannedSets || (item.snapshot && item.snapshot.sets) || 0;
+      actualSets += item.actualSetsCompleted || 0;
+    });
+    return {
+      exerciseCount: (entry.exercises || []).length,
+      plannedSets: plannedSets,
+      actualSets: actualSets
     };
   }
 
@@ -328,6 +389,10 @@
     createWorkoutSession: createWorkoutSession,
     finalizeHistoryEntry: finalizeHistoryEntry,
     getTodayWeekIndex: getTodayWeekIndex,
-    makeExerciseId: makeExerciseId
+    makeExerciseId: makeExerciseId,
+    formatTime: formatTime,
+    formatDateVi: formatDateVi,
+    completionStatusLabel: completionStatusLabel,
+    summarizeHistoryEntry: summarizeHistoryEntry
   };
 })();

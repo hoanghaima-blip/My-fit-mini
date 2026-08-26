@@ -5,79 +5,169 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css">
 <title>My Fit Mini</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#f7f5f1;color:#222;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif}
-.wrap{max-width:760px;margin:auto;padding:28px 18px 50px}.eyebrow{font-size:14px;color:#777}.title{font-size:40px;line-height:1.05;font-weight:800;margin:4px 0 28px}
-.tabs{display:flex;gap:10px}.tab{border:0;background:#ebe9e5;border-radius:18px;padding:16px 20px;font-size:18px;font-weight:700}.tab.active{background:#222;color:#fff}
-.hero{background:#efede8;border-radius:26px;padding:24px;margin:26px 0}.small{font-size:14px;color:#777}.hero h2{font-size:30px;margin:8px 0}.hero p{color:#666}.start,.btn,.complete{width:100%;border:0;background:#222;color:#fff;padding:17px;border-radius:16px;font-size:18px;font-weight:800}
-.section{font-size:28px;font-weight:800;margin:22px 0 14px}.week{display:flex;gap:8px;overflow:auto}.day{min-width:74px;background:#eeece8;border-radius:18px;padding:12px 8px;text-align:center;font-weight:800}.day span{display:block;font-size:24px;margin-top:4px}
-.card{background:#fff;border-radius:20px;margin:12px 0;padding:16px;box-shadow:0 2px 10px #0001}.name{font-size:18px;font-weight:800}.meta{color:#777;margin-top:7px}.badge{display:inline-block;background:#f0eee9;border-radius:10px;padding:6px 9px;font-size:13px;margin-top:10px}.note{font-size:14px;color:#666;line-height:1.45;margin-top:8px}
-.overlay,.workout{position:fixed;inset:0;background:#0008;display:none;align-items:flex-end;z-index:20}.modal{background:#fff;border-radius:28px 28px 16px 16px;width:100%;max-height:92vh;overflow:auto;padding:18px}.closex{float:right;border:0;background:#eee;border-radius:50%;width:40px;height:40px;font-size:20px}.btn,.complete{margin-top:15px}.workout{background:#f7f5f1;padding:24px 18px}.workout-inner{max-width:760px;margin:auto;width:100%}.progress{color:#777;font-weight:700}.workout h2{font-size:32px}
-</style>
 </head>
 <body>
 <main class="wrap">
-<div class="eyebrow">My Fit Mini</div><h1 class="title">Lịch tập của bạn</h1>
+<div class="eyebrow">My Fit Mini</div>
+<h1 class="title">Lịch tập của bạn</h1>
+
+<div class="resume-banner" id="resume-banner">
+  <p>Bạn đang có buổi tập dở. Tiếp tục hay bỏ buổi tập này?</p>
+  <div class="resume-actions">
+    <button type="button" class="resume-continue" id="resume-continue-btn">Tiếp tục tập</button>
+    <button type="button" class="resume-discard" id="resume-discard-btn">Bỏ buổi tập</button>
+  </div>
+</div>
+
 <div class="tabs">
-<button class="tab active" onclick="selectDay('a',this)">T2 · 🍑</button>
-<button class="tab" onclick="selectDay('b',this)">T4 · 💪</button>
-<button class="tab" onclick="selectDay('c',this)">T6 · 🍑</button>
+<button type="button" class="tab active" data-workout-id="a">T2 · 🍑</button>
+<button type="button" class="tab" data-workout-id="b">T4 · 💪</button>
+<button type="button" class="tab" data-workout-id="c">T6 · 🍑</button>
 </div>
-<section class="hero"><div class="small">BUỔI ĐANG CHỌN</div><h2 id="title"></h2><p id="meta"></p><button class="start" onclick="startWorkout()">Bắt đầu tập</button></section>
+
+<section class="hero">
+  <div class="small">BUỔI ĐANG CHỌN</div>
+  <h2 id="hero-title"></h2>
+  <p id="hero-meta"></p>
+  <button type="button" class="start" id="start-workout-btn">Bắt đầu tập</button>
+</section>
+
 <div class="section">Lịch tuần</div>
-<div class="week">
-<div class="day">T2<span>🍑</span></div><div class="day">T3<span>🏓</span></div><div class="day">T4<span>💪</span></div><div class="day">T5<span>🏓</span></div><div class="day">T6<span>🍑</span></div><div class="day">T7<span>🧘</span></div><div class="day">CN<span>😴</span></div>
-</div>
-<div class="section">Bài tập</div><div id="list"></div>
+<div class="week" id="week-calendar"></div>
+
+<div class="section">Bài tập</div>
+<div id="exercise-list"></div>
+
+<div class="section">Lịch sử tập</div>
+<div id="history-list"></div>
 </main>
 
-<div class="overlay" id="detail"><div class="modal"><button class="closex" onclick="closeDetail()">×</button>
-<div id="dprog" class="progress"></div><h2 id="dname"></h2><div id="dmeta" class="meta"></div><div id="dnote" class="note"></div>
-<button class="btn" onclick="startSelected()">Tập bài này</button></div></div>
+<div class="overlay" id="detail-overlay">
+  <div class="modal">
+    <button type="button" class="closex" id="detail-close-btn">×</button>
+    <div id="dprog" class="progress"></div>
+    <img id="dimage" class="modal-image" alt="" style="display:none">
+    <h2 id="dname"></h2>
+    <div id="dmeta" class="meta"></div>
+    <div id="dinstructions" class="note"></div>
+    <div id="dnote" class="note"></div>
+    <button type="button" class="btn" id="detail-start-btn">Tập bài này</button>
+  </div>
+</div>
 
-<div class="workout" id="workout"><div class="workout-inner"><button class="closex" onclick="closeWorkout()">×</button>
-<div id="wprog" class="progress"></div><h2 id="wname"></h2><div id="wmeta" class="meta"></div><div id="wset" class="note"></div>
-<button class="complete" onclick="next()">✓ Hoàn thành hiệp</button></div></div>
+<div class="overlay" id="edit-overlay">
+  <div class="modal">
+    <button type="button" class="closex" id="edit-close-btn">×</button>
+    <h2>Sửa bài tập</h2>
+    <form id="edit-form">
+      <div class="form-group"><label>Tên bài</label><input name="name" required></div>
+      <div class="form-group"><label>Hướng dẫn</label><textarea name="instructions" rows="5"></textarea></div>
+      <div class="form-group"><label>Chú ý</label><textarea name="notes" rows="4"></textarea></div>
+      <div class="form-group">
+        <label>Ảnh minh họa</label>
+        <div class="image-picker">
+          <img class="image-preview" data-role="preview" alt="" style="display:none">
+          <input name="imageFile" type="file" accept="image/*" class="file-input">
+          <button type="button" class="btn-secondary image-pick-btn" data-role="pick">Chọn ảnh từ thiết bị</button>
+          <input name="image" type="url" placeholder="Hoặc dán URL ảnh (tùy chọn)">
+          <button type="button" class="btn-secondary image-clear-btn" data-role="clear">Xóa ảnh</button>
+        </div>
+      </div>
+      <div class="form-group"><label>Số set</label><input name="sets" type="number" min="1" required></div>
+      <div class="form-group"><label>Số reps</label><input name="reps" type="number" min="1" required></div>
+      <div class="form-group"><label>Mức kháng lực</label><input name="resistance" type="number" min="0" step="0.5"></div>
+      <div class="form-group">
+        <label>Loại kháng lực</label>
+        <select name="resistanceType">
+          <option value="kg">kg</option>
+          <option value="band">band</option>
+          <option value="bodyweight">bodyweight</option>
+        </select>
+      </div>
+      <button type="submit" class="btn">Lưu thay đổi</button>
+    </form>
+  </div>
+</div>
 
-<script>
-const data={
-a:{title:"🍑 Glutes A",meta:"6 bài • khoảng 40 phút",items:[
-["Bulgarian Split Squat","3 × 10 / bên","3–5 kg","Xuống chậm, đầu gối trước đi theo hướng mũi chân."],
-["Romanian Deadlift","3 × 10–12","5 kg","Đẩy hông ra sau, lưng trung lập."],
-["Sumo Squat","3 × 12–15","5 kg","Chân rộng, gối mở theo hướng mũi chân."],
-["Cable Kickback","3 × 15 / bên","Nhẹ–vừa","Khi thu chân về, co gối sâu; khi đá ra sau, đá hơi chéo để siết mông."],
-["Glute Bridge + Band Abduction","3 × 12–15","Band","Nằm trên thảm, dây ở đùi; nâng mông rồi mở gối có kiểm soát."],
-["Extended Range Side-Lying Hip Abduction on Bench","3 × 12–15 / bên","Band","Nằm nghiêng trên ghế; chân dưới ổn định, chân trên mở từ khớp hông trong biên độ kiểm soát."]
-]},
-b:{title:"💪 Upper Body",meta:"4 bài • khoảng 30 phút",items:[
-["Lat Pulldown","3 × 10–12","Vừa","Kéo khuỷu tay xuống, không nhún vai."],
-["Seated Cable Row","3 × 10–12","Vừa","Giữ ngực mở, kéo khuỷu tay về sau."],
-["Dumbbell Shoulder Press","3 × 10–12","Nhẹ–vừa","Giữ cổ tay trung lập."],
-["Lateral Raise","3 × 12–15","1–3 kg","Nâng đến khoảng ngang vai, không vung tạ."]
-]},
-c:{title:"🍑 Glutes B",meta:"5 bài • khoảng 35 phút",items:[
-["Hip Thrust","3 × 10–12","Vừa","Siết mông ở đỉnh, không ưỡn lưng."],
-["Step-Up","3 × 10 / bên","Nhẹ–vừa","Đạp bằng chân trên bục, kiểm soát khi xuống."],
-["Banded Abduction","3 × 20","Band","Mở gối chậm, giữ căng dây."],
-["Single-Leg Glute Bridge","3 × 12 / bên","Bodyweight","Giữ xương chậu ổn định."],
-["Frog Pump","3 × 20","Bodyweight","Hai bàn chân áp nhau, nâng hông và siết mông."]
-]}
-};
-let current='a', selected=0, set=1;
-function render(){
-const d=data[current]; title.textContent=d.title; meta.textContent=d.meta;
-list.innerHTML=d.items.map((x,i)=>`<div class="card" onclick="detail(${i})"><div class="name">${i+1}. ${x[0]}</div><div class="meta">${x[1]} · ${x[2]}</div><div class="badge">Xem hướng dẫn</div><div class="note">${x[3]}</div></div>`).join('');
-}
-function selectDay(k,el){current=k;document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');render()}
-function detail(i){selected=i;const x=data[current].items[i];dprog.textContent=`Bài ${i+1}/${data[current].items.length}`;dname.textContent=x[0];dmeta.textContent=`${x[1]} · ${x[2]}`;dnote.textContent=x[3];detailBox.style.display='flex'}
-function closeDetail(){detailBox.style.display='none'}
-function startSelected(){closeDetail();set=1;showWorkout()}
-function startWorkout(){selected=0;set=1;showWorkout()}
-function showWorkout(){const x=data[current].items[selected];wprog.textContent=`Bài ${selected+1}/${data[current].items.length} · Hiệp ${set}/3`;wname.textContent=x[0];wmeta.textContent=`${x[1]} · ${x[2]}`;wset.textContent=x[3];workoutBox.style.display='flex'}
-function next(){if(set<3){set++;showWorkout()}else if(selected<data[current].items.length-1){selected++;set=1;showWorkout()}else{alert('🎉 Hoàn thành buổi tập!');closeWorkout()}}
-function closeWorkout(){workoutBox.style.display='none'}
-const detailBox=document.getElementById('detail'),workoutBox=document.getElementById('workout');render();
-if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-</script>
-</body></html>
+<div class="overlay" id="replace-overlay">
+  <div class="modal">
+    <button type="button" class="closex" id="replace-close-btn">×</button>
+    <h2>Thay bài</h2>
+    <form id="replace-form">
+      <div class="form-group"><label>Tên bài mới</label><input name="name" required></div>
+      <div class="form-group"><label>Hướng dẫn mới</label><textarea name="instructions" rows="5"></textarea></div>
+      <div class="form-group"><label>Chú ý mới</label><textarea name="notes" rows="4"></textarea></div>
+      <div class="form-group">
+        <label>Ảnh mới</label>
+        <div class="image-picker">
+          <img class="image-preview" data-role="preview" alt="" style="display:none">
+          <input name="imageFile" type="file" accept="image/*" class="file-input">
+          <button type="button" class="btn-secondary image-pick-btn" data-role="pick">Chọn ảnh từ thiết bị</button>
+          <input name="image" type="url" placeholder="Hoặc dán URL ảnh (tùy chọn)">
+          <button type="button" class="btn-secondary image-clear-btn" data-role="clear">Xóa ảnh</button>
+        </div>
+      </div>
+      <div class="form-group"><label>Số set</label><input name="sets" type="number" min="1" required></div>
+      <div class="form-group"><label>Số reps</label><input name="reps" type="number" min="1" required></div>
+      <div class="form-group"><label>Mức kháng lực</label><input name="resistance" type="number" min="0" step="0.5"></div>
+      <div class="form-group">
+        <label>Loại kháng lực</label>
+        <select name="resistanceType">
+          <option value="kg">kg</option>
+          <option value="band">band</option>
+          <option value="bodyweight">bodyweight</option>
+        </select>
+      </div>
+      <button type="submit" class="btn">Thay bài</button>
+    </form>
+  </div>
+</div>
+
+<div class="overlay" id="history-detail-overlay">
+  <div class="modal">
+    <button type="button" class="closex" id="history-detail-close-btn">×</button>
+    <div id="history-detail-content"></div>
+  </div>
+</div>
+
+<div class="workout" id="workout-overlay">
+  <div class="workout-inner">
+    <button type="button" class="closex" id="workout-close-btn">×</button>
+    <div id="wprog" class="progress"></div>
+    <img id="wimage" class="workout-image" alt="" style="display:none">
+    <h2 id="wname"></h2>
+    <div id="wmeta" class="meta"></div>
+    <div id="wset-display" class="set-display"></div>
+    <div id="wreps-display" class="reps-display"></div>
+    <div id="wset" class="note"></div>
+    <button type="button" class="complete" id="complete-set-btn">Hoàn thành SET</button>
+    <button type="button" class="btn-secondary" id="complete-exercise-btn">Hoàn thành bài tập</button>
+  </div>
+</div>
+
+<div class="rest-screen" id="rest-overlay">
+  <div class="rest-inner">
+    <div id="rest-label" class="rest-label"></div>
+    <div id="rest-timer" class="rest-timer">01:00</div>
+    <div class="rest-actions">
+      <button type="button" class="rest-skip" id="rest-skip-btn">Bỏ qua</button>
+      <button type="button" class="rest-add" id="rest-add-btn">+15 giây</button>
+    </div>
+  </div>
+</div>
+
+<div class="completion-screen" id="completion-overlay">
+  <div class="completion-inner">
+    <h2>🎉 Workout hoàn thành</h2>
+    <div id="completion-stats" class="completion-stats"></div>
+    <button type="button" class="start" id="completion-home-btn">Quay về trang chính</button>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="images.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

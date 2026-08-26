@@ -112,7 +112,6 @@
       exercises: [
         createLegCurlActivation(),
         createExercise('a', ['Bulgarian Split Squat', '3 × 10 / bên', '3–5 kg', 'Xuống chậm, đầu gối trước đi theo hướng mũi chân.']),
-        createExercise('a', ['Romanian Deadlift', '3 × 10–12', '5 kg', 'Đẩy hông ra sau, lưng trung lập.']),
         createExercise('a', ['Sumo Squat', '3 × 12–15', '5 kg', 'Chân rộng, gối mở theo hướng mũi chân.']),
         createExercise('a', ['Cable Kickback', '3 × 15 / bên', 'Nhẹ–vừa', 'Khi thu chân về, co gối sâu; khi đá ra sau, đá hơi chéo để siết mông.']),
         createExercise('a', ['Glute Bridge + Band Abduction', '3 × 12–15', 'Band', 'Nằm trên thảm, dây ở đùi; nâng mông rồi mở gối có kiểm soát.']),
@@ -242,13 +241,31 @@
     return { workouts: workouts, changed: false };
   }
 
+  function migrateGlutesARemoveRomanianDeadlift(workouts) {
+    if (!workouts || !workouts.a || !Array.isArray(workouts.a.exercises)) {
+      return { workouts: workouts, changed: false };
+    }
+    var before = workouts.a.exercises;
+    var after = before.filter(function (exercise) {
+      return !/romanian\s*deadlift/i.test(String(exercise && exercise.name || ''));
+    });
+    if (after.length === before.length) {
+      return { workouts: workouts, changed: false };
+    }
+    workouts.a.exercises = after;
+    return { workouts: workouts, changed: true };
+  }
+
   function loadWorkouts() {
     var stored = readJson(STORAGE_KEYS.workouts, null);
     var migrated = migrateLegacyWorkouts(stored);
     var workouts = migrated ? normalizeWorkouts(migrated) : normalizeWorkouts(clone(DEFAULT_WORKOUTS));
-    var result = migrateGlutesALegCurl(workouts);
-    if (result.changed || !stored) saveWorkouts(result.workouts);
-    return result.workouts;
+    var legCurlResult = migrateGlutesALegCurl(workouts);
+    workouts = legCurlResult.workouts;
+    var rdlResult = migrateGlutesARemoveRomanianDeadlift(workouts);
+    workouts = rdlResult.workouts;
+    if (legCurlResult.changed || rdlResult.changed || !stored) saveWorkouts(workouts);
+    return workouts;
   }
 
   function saveWorkouts(workouts) {

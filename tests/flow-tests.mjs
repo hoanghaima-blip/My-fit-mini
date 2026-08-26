@@ -520,6 +520,51 @@ async function run() {
     fail('TEST 17', err);
   }
 
+  // NEW: Glutes A has no Romanian Deadlift; Sumo is #3
+  try {
+    resetStorage();
+    const { window } = loadApp();
+    const exercises = window.MyFitData.loadWorkouts().a.exercises;
+    assert(exercises.every((ex) => !/romanian\s*deadlift/i.test(ex.name)), 'no Romanian Deadlift in Glutes A');
+    assert(exercises[0] && /leg\s*curl/i.test(exercises[0].name), '1 is Leg Curl');
+    assert(exercises[1] && exercises[1].name === 'Bulgarian Split Squat', '2 is Bulgarian');
+    assert(exercises[2] && exercises[2].name === 'Sumo Squat', '3 is Sumo Squat');
+    assert(exercises[3] && /Cable Kickback/i.test(exercises[3].name), '4 is Cable Kickback');
+    // migration removes RDL from stored workouts without duplicating Sumo
+    const D = window.MyFitData;
+    const withRdl = D.clone(D.loadWorkouts());
+    withRdl.a.exercises = [
+      withRdl.a.exercises[0],
+      withRdl.a.exercises[1],
+      {
+        id: 'a-romanian-deadlift',
+        name: 'Romanian Deadlift',
+        image: '',
+        imageId: '',
+        instructions: 'old rdl',
+        notes: '',
+        sets: 3,
+        reps: 11,
+        resistance: 5,
+        resistanceType: 'kg'
+      },
+      ...withRdl.a.exercises.slice(2)
+    ];
+    const sumoBefore = withRdl.a.exercises.find((ex) => ex.name === 'Sumo Squat');
+    D.saveWorkouts(withRdl);
+    window.close?.();
+    const again = loadApp();
+    const after = again.window.MyFitData.loadWorkouts().a.exercises;
+    assert(after.every((ex) => !/romanian\s*deadlift/i.test(ex.name)), 'migration removes RDL');
+    assert(after[2].name === 'Sumo Squat', 'after migration Sumo is still #3');
+    assert(after.filter((ex) => ex.name === 'Sumo Squat').length === 1, 'no duplicate Sumo');
+    assert(after[2].sets === sumoBefore.sets && after[2].reps === sumoBefore.reps, 'Sumo data preserved');
+    pass('TEST 19: Glutes A removes Romanian Deadlift; Sumo is #3');
+    again.dom.window.close();
+  } catch (err) {
+    fail('TEST 19', err);
+  }
+
   // NEW: Welcome screen present and buttons route correctly
   try {
     const { window } = loadApp();
@@ -554,7 +599,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="7"'), 'version meta is 7');
+    assert(html.includes('myfit-version" content="8"'), 'version meta is 8');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
@@ -565,8 +610,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v7'), 'service worker cache v7');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v7 + logo');
+    assert(sw.includes('my-fit-mini-v8'), 'service worker cache v8');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v8 + logo');
   } catch (err) {
     fail('TEST 16', err);
   }

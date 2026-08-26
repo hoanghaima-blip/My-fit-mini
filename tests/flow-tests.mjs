@@ -107,6 +107,7 @@ function makeMiniWorkout() {
 
 function installMiniWorkout(window) {
   const D = window.MyFitData;
+  window.MyFitApp.setActiveSession(null);
   const workouts = window.MyFitApp.getWorkouts();
   workouts.test = makeMiniWorkout();
   D.saveWorkouts(workouts);
@@ -519,18 +520,53 @@ async function run() {
     fail('TEST 17', err);
   }
 
+  // NEW: Welcome screen present and buttons route correctly
+  try {
+    const { window } = loadApp();
+    resetStorage();
+    const app = window.MyFitApp;
+    const welcome = window.document.getElementById('welcome-screen');
+    const home = window.document.getElementById('app-home');
+    const library = window.document.getElementById('library-screen');
+    assert(!!welcome, 'welcome-screen exists');
+    assert(!!home, 'app-home exists');
+    assert(!!library, 'library-screen exists');
+    assert(!welcome.hidden, 'welcome visible on open');
+    assert(home.hidden, 'home hidden on open');
+    assert(window.document.getElementById('welcome-start-btn'), 'start button');
+    assert(window.document.getElementById('welcome-schedule-btn'), 'schedule button');
+    assert(window.document.getElementById('welcome-library-btn'), 'library button');
+    assert(window.MyFitData.WELCOME_BACKGROUND_IMAGE.indexOf('welcome-background') >= 0, 'background constant');
+    assert(window.MyFitData.REST_SET_SECONDS === 60, 'set rest still 60');
+    assert(window.MyFitData.REST_EXERCISE_SECONDS === 90, 'exercise rest still 90');
+    app.welcomeOpenSchedule();
+    assert(welcome.hidden, 'welcome hidden after schedule');
+    assert(!home.hidden, 'home shown after schedule');
+    app.showWelcome();
+    app.welcomeOpenLibrary();
+    assert(!library.hidden, 'library shown');
+    assert(home.hidden, 'home hidden in library');
+    pass('TEST 18: Welcome screen + navigation + timer constants unchanged');
+  } catch (err) {
+    fail('TEST 18', err);
+  }
+
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="6"'), 'version meta is 6');
+    assert(html.includes('myfit-version" content="7"'), 'version meta is 7');
+    assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
     assert(html.includes('jump-history-btn'), 'jump history button in HTML');
     assert(html.includes('myfit-ui-version'), 'safe cache refresh gate present');
     assert(html.includes('assets/logo-header.png'), 'app logo in HTML');
+    assert(html.includes('Bắt đầu ngay'), 'welcome primary CTA');
+    assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
+    assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v6'), 'service worker cache v6');
-    pass('TEST 16: HTML/SW ship History UI + cache v6 + logo');
+    assert(sw.includes('my-fit-mini-v7'), 'service worker cache v7');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v7 + logo');
   } catch (err) {
     fail('TEST 16', err);
   }

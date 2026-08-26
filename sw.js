@@ -1,22 +1,22 @@
-const CACHE_NAME = 'my-fit-mini-v6';
-const APP_VERSION = '6';
+const CACHE_NAME = 'my-fit-mini-v7';
+const APP_VERSION = '7';
 
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './styles.css?v=6',
-  './data.js?v=6',
-  './images.js?v=6',
-  './app.js?v=6',
+  './styles.css?v=7',
+  './data.js?v=7',
+  './images.js?v=7',
+  './app.js?v=7',
   './styles.css',
   './data.js',
   './images.js',
   './app.js',
   './sw.js',
   './assets/logo-header.png',
-  './assets/leg-curl-thumb.jpg',
   './assets/leg-curl-machine.jpg',
+  './assets/welcome-background.jpg',
   './assets/icon-192.png',
   './assets/icon-512.png'
 ];

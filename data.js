@@ -12,6 +12,9 @@
   var REST_EXERCISE_SECONDS = 90;
   var WORK_SECONDS_PER_SET = 60;
 
+  // Swap this path later to change the welcome background without layout changes.
+  var WELCOME_BACKGROUND_IMAGE = 'assets/welcome-background.jpg';
+
   var WEEK_DAYS = [
     { key: 't2', label: 'T2', emoji: '🍑', workoutId: 'a' },
     { key: 't3', label: 'T3', emoji: '🏓', workoutId: null },
@@ -422,12 +425,19 @@
     return day === 0 ? 6 : day - 1;
   }
 
+  function getTodayWorkoutId() {
+    var today = WEEK_DAYS[getTodayWeekIndex()];
+    if (today && today.workoutId) return today.workoutId;
+    return 'a';
+  }
+
   window.MyFitData = {
     STORAGE_KEYS: STORAGE_KEYS,
     REST_SET_SECONDS: REST_SET_SECONDS,
     REST_EXERCISE_SECONDS: REST_EXERCISE_SECONDS,
     WORK_SECONDS_PER_SET: WORK_SECONDS_PER_SET,
     WEEK_DAYS: WEEK_DAYS,
+    WELCOME_BACKGROUND_IMAGE: WELCOME_BACKGROUND_IMAGE,
     DEFAULT_WORKOUTS: DEFAULT_WORKOUTS,
     clone: clone,
     loadWorkouts: loadWorkouts,
@@ -448,6 +458,7 @@
     createWorkoutSession: createWorkoutSession,
     finalizeHistoryEntry: finalizeHistoryEntry,
     getTodayWeekIndex: getTodayWeekIndex,
+    getTodayWorkoutId: getTodayWorkoutId,
     makeExerciseId: makeExerciseId,
     formatTime: formatTime,
     formatDateVi: formatDateVi,

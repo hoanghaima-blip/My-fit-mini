@@ -15,6 +15,10 @@
   };
 
   var els = {
+    welcomeScreen: document.getElementById('welcome-screen'),
+    welcomeBg: document.getElementById('welcome-bg'),
+    appHome: document.getElementById('app-home'),
+    libraryScreen: document.getElementById('library-screen'),
     title: document.getElementById('hero-title'),
     meta: document.getElementById('hero-meta'),
     list: document.getElementById('exercise-list'),
@@ -495,6 +499,66 @@
     });
   }
 
+  function applyWelcomeBackground() {
+    if (!els.welcomeBg) return;
+    var src = D.WELCOME_BACKGROUND_IMAGE || 'assets/welcome-background.jpg';
+    els.welcomeBg.style.backgroundImage = 'url("' + src.replace(/"/g, '\\"') + '")';
+  }
+
+  function showWelcome() {
+    if (els.welcomeScreen) els.welcomeScreen.hidden = false;
+    if (els.appHome) els.appHome.hidden = true;
+    if (els.libraryScreen) els.libraryScreen.hidden = true;
+  }
+
+  function showHome() {
+    if (els.welcomeScreen) els.welcomeScreen.hidden = true;
+    if (els.appHome) els.appHome.hidden = false;
+    if (els.libraryScreen) els.libraryScreen.hidden = true;
+    renderAll();
+  }
+
+  function showLibrary() {
+    if (els.welcomeScreen) els.welcomeScreen.hidden = true;
+    if (els.appHome) els.appHome.hidden = true;
+    if (els.libraryScreen) els.libraryScreen.hidden = false;
+  }
+
+  function selectTodayWorkout() {
+    var todayId = D.getTodayWorkoutId();
+    if (getWorkout(todayId)) {
+      selectWorkout(todayId);
+      return todayId;
+    }
+    if (!getWorkout(currentWorkoutId)) selectWorkout('a');
+    return currentWorkoutId;
+  }
+
+  function welcomeStartNow() {
+    selectTodayWorkout();
+    showHome();
+    if (activeSession && activeSession.phase !== 'complete') {
+      resumePromptShown = false;
+      showResumeBanner();
+      return;
+    }
+    resumePromptShown = true;
+    startWorkout(0);
+  }
+
+  function welcomeOpenSchedule() {
+    selectTodayWorkout();
+    showHome();
+    if (activeSession && activeSession.phase !== 'complete') {
+      resumePromptShown = false;
+      showResumeBanner();
+    }
+  }
+
+  function welcomeOpenLibrary() {
+    showLibrary();
+  }
+
   function clearRestTimer() {
     if (restTimerId) {
       clearInterval(restTimerId);
@@ -783,6 +847,17 @@
     document.getElementById('completion-home-btn').addEventListener('click', closeCompletion);
     document.getElementById('resume-continue-btn').addEventListener('click', continueWorkout);
     document.getElementById('resume-discard-btn').addEventListener('click', discardWorkout);
+
+    var welcomeStartBtn = document.getElementById('welcome-start-btn');
+    var welcomeScheduleBtn = document.getElementById('welcome-schedule-btn');
+    var welcomeLibraryBtn = document.getElementById('welcome-library-btn');
+    var libraryBackBtn = document.getElementById('library-back-btn');
+    var libraryToScheduleBtn = document.getElementById('library-to-schedule-btn');
+    if (welcomeStartBtn) welcomeStartBtn.addEventListener('click', welcomeStartNow);
+    if (welcomeScheduleBtn) welcomeScheduleBtn.addEventListener('click', welcomeOpenSchedule);
+    if (welcomeLibraryBtn) welcomeLibraryBtn.addEventListener('click', welcomeOpenLibrary);
+    if (libraryBackBtn) libraryBackBtn.addEventListener('click', showWelcome);
+    if (libraryToScheduleBtn) libraryToScheduleBtn.addEventListener('click', welcomeOpenSchedule);
   }
 
   function registerServiceWorker() {
@@ -815,9 +890,14 @@
 
   function init() {
     if (!getWorkout(currentWorkoutId)) currentWorkoutId = 'a';
+    applyWelcomeBackground();
     bindEvents();
     renderAll();
-    if (activeSession && activeSession.phase !== 'complete') showResumeBanner();
+    showWelcome();
+    if (activeSession && activeSession.phase !== 'complete') {
+      // Keep resume data ready; banner shows when user enters home/schedule.
+      resumePromptShown = false;
+    }
     registerServiceWorker();
   }
 
@@ -841,7 +921,13 @@
     showWorkoutView: showWorkoutView,
     continueWorkout: continueWorkout,
     openEdit: openEdit,
-    openReplace: openReplace
+    openReplace: openReplace,
+    showWelcome: showWelcome,
+    showHome: showHome,
+    showLibrary: showLibrary,
+    welcomeStartNow: welcomeStartNow,
+    welcomeOpenSchedule: welcomeOpenSchedule,
+    welcomeOpenLibrary: welcomeOpenLibrary
   };
 
   init();

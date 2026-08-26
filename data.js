@@ -63,10 +63,10 @@
     return { resistance: 0, resistanceType: 'kg' };
   }
 
-  function createExercise(workoutId, legacyRow) {
+  function createExercise(workoutId, legacyRow, extras) {
     var parsed = parseLegacyMeta(legacyRow[1]);
     var resistance = parseLegacyResistance(legacyRow[2]);
-    return {
+    var exercise = {
       id: makeExerciseId(workoutId, legacyRow[0]),
       name: legacyRow[0],
       image: '',
@@ -78,6 +78,28 @@
       resistance: resistance.resistance,
       resistanceType: resistance.resistanceType
     };
+    if (extras && typeof extras === 'object') {
+      Object.keys(extras).forEach(function (key) {
+        exercise[key] = extras[key];
+      });
+    }
+    return exercise;
+  }
+
+  function createLegCurlActivation() {
+    return {
+      id: 'a-seated-leg-curl',
+      name: 'Seated Leg Curl / Leg Curl máy',
+      image: 'assets/leg-curl-machine.jpg',
+      imageId: '',
+      instructions: 'Tư thế bắt đầu → gập gối kéo con lăn về phía mông → trở về chậm. Bài khởi động/kích hoạt đùi sau, không phải bài chính.',
+      notes: 'Tập nhẹ, kiểm soát động tác, tập trung cảm nhận đùi sau.',
+      sets: 3,
+      reps: 18,
+      repsRange: '15–20',
+      resistance: 0,
+      resistanceType: 'kg'
+    };
   }
 
   var DEFAULT_WORKOUTS = {
@@ -85,6 +107,7 @@
       id: 'a',
       title: '🍑 Glutes A',
       exercises: [
+        createLegCurlActivation(),
         createExercise('a', ['Bulgarian Split Squat', '3 × 10 / bên', '3–5 kg', 'Xuống chậm, đầu gối trước đi theo hướng mũi chân.']),
         createExercise('a', ['Romanian Deadlift', '3 × 10–12', '5 kg', 'Đẩy hông ra sau, lưng trung lập.']),
         createExercise('a', ['Sumo Squat', '3 × 12–15', '5 kg', 'Chân rộng, gối mở theo hướng mũi chân.']),
@@ -185,11 +208,44 @@
     return workouts;
   }
 
+  function migrateGlutesALegCurl(workouts) {
+    if (!workouts || !workouts.a || !Array.isArray(workouts.a.exercises)) {
+      return { workouts: workouts, changed: false };
+    }
+    var exercises = workouts.a.exercises;
+    if (!exercises.length) return { workouts: workouts, changed: false };
+    var first = exercises[0];
+    var firstName = String(first.name || '');
+    if (/leg\s*curl/i.test(firstName)) {
+      var changed = false;
+      if (!first.image && !first.imageId) {
+        first.image = 'assets/leg-curl-machine.jpg';
+        changed = true;
+      }
+      if (!first.repsRange) {
+        first.repsRange = '15–20';
+        changed = true;
+      }
+      if (!first.notes) {
+        first.notes = 'Tập nhẹ, kiểm soát động tác, tập trung cảm nhận đùi sau.';
+        changed = true;
+      }
+      return { workouts: workouts, changed: changed };
+    }
+    if (firstName === 'Bulgarian Split Squat') {
+      workouts.a.exercises = [createLegCurlActivation()].concat(exercises);
+      return { workouts: workouts, changed: true };
+    }
+    return { workouts: workouts, changed: false };
+  }
+
   function loadWorkouts() {
     var stored = readJson(STORAGE_KEYS.workouts, null);
     var migrated = migrateLegacyWorkouts(stored);
-    if (migrated) return normalizeWorkouts(migrated);
-    return normalizeWorkouts(clone(DEFAULT_WORKOUTS));
+    var workouts = migrated ? normalizeWorkouts(migrated) : normalizeWorkouts(clone(DEFAULT_WORKOUTS));
+    var result = migrateGlutesALegCurl(workouts);
+    if (result.changed || !stored) saveWorkouts(result.workouts);
+    return result.workouts;
   }
 
   function saveWorkouts(workouts) {
@@ -226,11 +282,13 @@
     if (exercise.resistanceType === 'band') {
       return exercise.resistance > 0 ? 'Band · ' + exercise.resistance : 'Band';
     }
+    if (!exercise.resistance) return 'Nhẹ';
     return exercise.resistance + ' kg';
   }
 
   function formatExerciseMeta(exercise) {
-    return exercise.sets + ' × ' + exercise.reps + ' · ' + formatResistance(exercise);
+    var reps = exercise.repsRange || exercise.reps;
+    return exercise.sets + ' × ' + reps + ' · ' + formatResistance(exercise);
   }
 
   function estimateWorkoutSeconds(workout) {
@@ -265,6 +323,7 @@
       notes: exercise.notes || '',
       sets: exercise.sets,
       reps: exercise.reps,
+      repsRange: exercise.repsRange || '',
       resistance: exercise.resistance,
       resistanceType: exercise.resistanceType
     };

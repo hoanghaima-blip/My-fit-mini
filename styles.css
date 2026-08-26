@@ -1,5 +1,5 @@
 *{box-sizing:border-box}body{margin:0;background:#f7f5f1;color:#222;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif}
-.wrap{max-width:760px;margin:auto;padding:28px 18px 90px}.eyebrow{font-size:14px;color:#777}.title{font-size:40px;line-height:1.05;font-weight:800;margin:4px 0 28px}
+.wrap{max-width:760px;margin:auto;padding:28px 18px 90px}.brand{display:flex;align-items:center;margin:0 0 8px}.brand-logo{height:42px;width:auto;display:block}.title{font-size:40px;line-height:1.05;font-weight:800;margin:4px 0 28px}
 .tabs{display:flex;gap:10px;overflow:auto}.tab{border:0;background:#ebe9e5;border-radius:18px;padding:16px 20px;font-size:18px;font-weight:700;white-space:nowrap}.tab.active{background:#222;color:#fff}
 .hero{background:#efede8;border-radius:26px;padding:24px;margin:26px 0}.small{font-size:14px;color:#777}.hero h2{font-size:30px;margin:8px 0}.hero p{color:#666}.start,.btn,.complete,.btn-secondary{width:100%;border:0;background:#222;color:#fff;padding:17px;border-radius:16px;font-size:18px;font-weight:800;cursor:pointer}
 .btn-secondary{background:#eeece8;color:#222;margin-top:10px}

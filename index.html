@@ -4,27 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
-<meta name="myfit-version" content="5">
+<meta name="myfit-version" content="6">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=5">
+<link rel="stylesheet" href="styles.css?v=6">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <title>My Fit Mini</title>
 <script>
 /* Force one-time PWA cache refresh when UI version changes.
    Preserves workout/history localStorage and IndexedDB image data. */
 (function () {
-  var EXPECTED = '5';
+  var EXPECTED = '6';
   var VERSION_KEY = 'myfit-ui-version';
-  var RELOAD_KEY = 'myfit-ui-reload-v5';
+  var RELOAD_KEY = 'myfit-ui-reload-v6';
   try {
     var current = localStorage.getItem(VERSION_KEY);
     if (current === EXPECTED) return;
-    var preserve = {
-      'myfit-workouts-v2': true,
-      'myfit-history-v2': true,
-      'myfit-active-session-v2': true,
-      'myfit-last-day-v2': true,
-      'myfit-ui-version': true
-    };
     Promise.resolve()
       .then(function () {
         if (!('caches' in window)) return;
@@ -54,7 +49,9 @@
 </head>
 <body>
 <main class="wrap">
-<div class="eyebrow">My Fit Mini</div>
+<div class="brand">
+  <img class="brand-logo" src="assets/logo-header.png" alt="My Fit Mini">
+</div>
 <h1 class="title">Lịch tập của bạn</h1>
 
 <div class="resume-banner" id="resume-banner">
@@ -219,8 +216,8 @@
   </div>
 </div>
 
-<script src="data.js?v=5"></script>
-<script src="images.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="data.js?v=6"></script>
+<script src="images.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>

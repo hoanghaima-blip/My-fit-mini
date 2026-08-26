@@ -103,13 +103,20 @@
   function resolveImageSrc(imageRef) {
     if (!imageRef) return Promise.resolve('');
     if (typeof imageRef === 'string') {
-      if (imageRef.indexOf('http') === 0 || imageRef.indexOf('data:') === 0 || imageRef.indexOf('blob:') === 0) {
+      if (
+        imageRef.indexOf('http') === 0 ||
+        imageRef.indexOf('data:') === 0 ||
+        imageRef.indexOf('blob:') === 0 ||
+        imageRef.indexOf('assets/') === 0 ||
+        imageRef.indexOf('./') === 0 ||
+        imageRef.indexOf('/') === 0
+      ) {
         return Promise.resolve(imageRef);
       }
       return getImageObjectUrl(imageRef);
     }
     if (imageRef.imageId) return getImageObjectUrl(imageRef.imageId);
-    if (imageRef.image) return Promise.resolve(imageRef.image);
+    if (imageRef.image) return resolveImageSrc(imageRef.image);
     return Promise.resolve('');
   }
 

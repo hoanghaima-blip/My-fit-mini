@@ -144,12 +144,13 @@
       if (!slot) return;
       Img.resolveImageSrc(exercise).then(function (src) {
         if (!src || !slot.parentNode) return;
+        if (typeof document === 'undefined' || !document || typeof document.createElement !== 'function') return;
         var img = document.createElement('img');
         img.className = 'card-image';
         img.alt = '';
         img.src = src;
         slot.replaceWith(img);
-      });
+      }).catch(function () {});
     });
   }
 

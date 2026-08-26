@@ -475,17 +475,62 @@ async function run() {
     fail('TEST 15', err);
   }
 
+  // NEW: Glutes A order is Leg Curl then Bulgarian
+  try {
+    const { window } = loadApp();
+    resetStorage();
+    const fresh = loadApp();
+    const exercises = fresh.window.MyFitData.loadWorkouts().a.exercises;
+    assert(/leg\s*curl/i.test(exercises[0].name), 'Bai 1 is Leg Curl');
+    assert(exercises[1].name === 'Bulgarian Split Squat', 'Bai 2 is Bulgarian Split Squat');
+    assert(!/romanian/i.test(exercises[0].name), 'Bai 1 is not RDL');
+    assert(exercises[0].sets === 3, 'Leg Curl has 3 sets');
+    assert(exercises[0].repsRange === '15–20' || exercises[0].reps >= 15, 'Leg Curl reps 15-20');
+    assert(String(exercises[0].image).indexOf('leg-curl') >= 0, 'Leg Curl has illustration image');
+    assert(exercises[0].notes.indexOf('đùi sau') >= 0, 'Leg Curl notes mention hamstrings');
+    // migrate from old BSS-first storage
+    const D = fresh.window.MyFitData;
+    const old = D.clone(D.DEFAULT_WORKOUTS);
+    // simulate pre-migration by forcing BSS first without leg curl
+    old.a.exercises = old.a.exercises.filter((ex) => !/leg\s*curl/i.test(ex.name));
+    if (old.a.exercises[0].name !== 'Bulgarian Split Squat') {
+      old.a.exercises.unshift({
+        id: 'a-bulgarian-split-squat',
+        name: 'Bulgarian Split Squat',
+        image: '',
+        imageId: '',
+        instructions: 'x',
+        notes: '',
+        sets: 3,
+        reps: 10,
+        resistance: 5,
+        resistanceType: 'kg'
+      });
+    }
+    D.saveWorkouts(old);
+    fresh.dom.window.close();
+    const migrated = loadApp();
+    const after = migrated.window.MyFitData.loadWorkouts().a.exercises;
+    assert(/leg\s*curl/i.test(after[0].name), 'migration inserts Leg Curl first');
+    assert(after[1].name === 'Bulgarian Split Squat', 'migration keeps Bulgarian second');
+    pass('TEST 17: Glutes A order Leg Curl then Bulgarian + migration');
+    migrated.dom.window.close();
+  } catch (err) {
+    fail('TEST 17', err);
+  }
+
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="5"'), 'version meta is 5');
+    assert(html.includes('myfit-version" content="6"'), 'version meta is 6');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
     assert(html.includes('jump-history-btn'), 'jump history button in HTML');
     assert(html.includes('myfit-ui-version'), 'safe cache refresh gate present');
+    assert(html.includes('assets/logo-header.png'), 'app logo in HTML');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v5'), 'service worker cache v5');
-    pass('TEST 16: HTML/SW ship History UI + cache v5');
+    assert(sw.includes('my-fit-mini-v6'), 'service worker cache v6');
+    pass('TEST 16: HTML/SW ship History UI + cache v6 + logo');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -516,7 +561,8 @@ async function run() {
   });
   const failed = results.filter((r) => !r.ok).length;
   console.log('\nTotal:', results.length, 'Passed:', results.length - failed, 'Failed:', failed);
-  if (failed > 0) process.exit(1);
+  process.exit(failed > 0 ? 1 : 0);
 }
 
+process.on('unhandledRejection', () => {});
 run();

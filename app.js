@@ -768,12 +768,40 @@
     document.getElementById('resume-discard-btn').addEventListener('click', discardWorkout);
   }
 
+  function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    var refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+    navigator.serviceWorker
+      .register('./sw.js', { updateViaCache: 'none' })
+      .then(function (registration) {
+        function checkForUpdate() {
+          registration.update().catch(function () {});
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        }
+        checkForUpdate();
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') checkForUpdate();
+        });
+        window.addEventListener('focus', checkForUpdate);
+      })
+      .catch(function (err) {
+        console.warn('Service worker registration failed', err);
+      });
+  }
+
   function init() {
     if (!getWorkout(currentWorkoutId)) currentWorkoutId = 'a';
     bindEvents();
     renderAll();
     if (activeSession && activeSession.phase !== 'complete') showResumeBanner();
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+    registerServiceWorker();
   }
 
   window.MyFitApp = {

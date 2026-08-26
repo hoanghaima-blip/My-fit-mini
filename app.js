@@ -154,9 +154,14 @@
   }
 
   function renderHistory() {
+    if (!els.historyList) return;
     var history = D.loadHistory();
     if (!history.length) {
-      els.historyList.innerHTML = '<div class="history-empty">Chưa có buổi tập nào được lưu. Hoàn thành một workout để xem lịch sử tại đây.</div>';
+      els.historyList.innerHTML =
+        '<div class="card history-empty-card">' +
+          '<div class="name">Chưa có lịch sử</div>' +
+          '<div class="note">Hoàn thành một buổi tập để xem tên buổi, thời gian dự kiến/thực tế và chi tiết từng bài tại đây.</div>' +
+        '</div>';
       return;
     }
     els.historyList.innerHTML = history.map(function (entry, index) {
@@ -167,14 +172,20 @@
           '<div class="meta">' + escapeHtml(D.formatDateVi(entry.date)) + ' · ' +
             escapeHtml(D.formatTime(entry.startTime)) + ' – ' + escapeHtml(D.formatTime(entry.endTime)) +
           '</div>' +
-          '<div class="history-row"><span>Dự kiến</span><strong>' + escapeHtml(D.formatClockDuration(entry.estimatedDuration)) + '</strong></div>' +
-          '<div class="history-row"><span>Thực tế</span><strong>' + escapeHtml(D.formatClockDuration(entry.actualDuration)) + '</strong></div>' +
-          '<div class="history-row"><span>Bài tập</span><strong>' + summary.exerciseCount + '</strong></div>' +
-          '<div class="history-row"><span>Sets (planned / actual)</span><strong>' + summary.plannedSets + ' / ' + summary.actualSets + '</strong></div>' +
+          '<div class="history-row"><span>Thời gian dự kiến</span><strong>' + escapeHtml(D.formatClockDuration(entry.estimatedDuration)) + '</strong></div>' +
+          '<div class="history-row"><span>Thời gian thực tế</span><strong>' + escapeHtml(D.formatClockDuration(entry.actualDuration)) + '</strong></div>' +
+          '<div class="history-row"><span>Số bài</span><strong>' + summary.exerciseCount + '</strong></div>' +
+          '<div class="history-row"><span>Set dự kiến</span><strong>' + summary.plannedSets + '</strong></div>' +
+          '<div class="history-row"><span>Set thực tế</span><strong>' + summary.actualSets + '</strong></div>' +
           '<span class="badge">Xem chi tiết</span>' +
         '</div>'
       );
     }).join('');
+  }
+
+  function jumpToHistory() {
+    var section = document.getElementById('history-section');
+    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function openHistoryDetail(index) {
@@ -725,6 +736,11 @@
       startWorkout(0);
     });
 
+    var jumpHistoryBtn = document.getElementById('jump-history-btn');
+    if (jumpHistoryBtn) {
+      jumpHistoryBtn.addEventListener('click', jumpToHistory);
+    }
+
     els.list.addEventListener('click', function (event) {
       var target = event.target.closest('[data-action]');
       if (!target) return;
@@ -817,6 +833,7 @@
     renderAll: renderAll,
     renderHistory: renderHistory,
     openHistoryDetail: openHistoryDetail,
+    jumpToHistory: jumpToHistory,
     beginRest: beginRest,
     tickRest: tickRest,
     finishRestAdvance: finishRestAdvance,

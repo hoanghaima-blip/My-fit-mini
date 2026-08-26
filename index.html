@@ -4,10 +4,53 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
+<meta name="myfit-version" content="5">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=5">
 <title>My Fit Mini</title>
-<meta name="myfit-version" content="4">
+<script>
+/* Force one-time PWA cache refresh when UI version changes.
+   Preserves workout/history localStorage and IndexedDB image data. */
+(function () {
+  var EXPECTED = '5';
+  var VERSION_KEY = 'myfit-ui-version';
+  var RELOAD_KEY = 'myfit-ui-reload-v5';
+  try {
+    var current = localStorage.getItem(VERSION_KEY);
+    if (current === EXPECTED) return;
+    var preserve = {
+      'myfit-workouts-v2': true,
+      'myfit-history-v2': true,
+      'myfit-active-session-v2': true,
+      'myfit-last-day-v2': true,
+      'myfit-ui-version': true
+    };
+    Promise.resolve()
+      .then(function () {
+        if (!('caches' in window)) return;
+        return caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+        });
+      })
+      .then(function () {
+        if (!('serviceWorker' in navigator)) return;
+        return navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+        });
+      })
+      .then(function () {
+        localStorage.setItem(VERSION_KEY, EXPECTED);
+        if (!sessionStorage.getItem(RELOAD_KEY)) {
+          sessionStorage.setItem(RELOAD_KEY, '1');
+          location.reload();
+        }
+      })
+      .catch(function () {
+        try { localStorage.setItem(VERSION_KEY, EXPECTED); } catch (e) {}
+      });
+  } catch (err) {}
+})();
+</script>
 </head>
 <body>
 <main class="wrap">
@@ -33,6 +76,7 @@
   <h2 id="hero-title"></h2>
   <p id="hero-meta"></p>
   <button type="button" class="start" id="start-workout-btn">Bắt đầu tập</button>
+  <button type="button" class="btn-secondary" id="jump-history-btn">Xem lịch sử tập</button>
 </section>
 
 <div class="section">Lịch tuần</div>
@@ -41,8 +85,16 @@
 <div class="section">Bài tập</div>
 <div id="exercise-list"></div>
 
-<div class="section">Lịch sử tập</div>
-<div id="history-list"></div>
+<section id="history-section" class="history-section">
+  <div class="section">Lịch sử tập</div>
+  <p class="history-intro">Các buổi đã hoàn thành được lưu dạng snapshot. Sửa hoặc thay bài sau này không làm đổi lịch sử cũ.</p>
+  <div id="history-list">
+    <div class="card history-empty-card">
+      <div class="name">Chưa có lịch sử</div>
+      <div class="note">Hoàn thành một buổi tập để xem tên buổi, thời gian dự kiến/thực tế và chi tiết từng bài tại đây.</div>
+    </div>
+  </div>
+</section>
 </main>
 
 <div class="overlay" id="detail-overlay">
@@ -167,8 +219,8 @@
   </div>
 </div>
 
-<script src="data.js?v=4"></script>
-<script src="images.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="data.js?v=5"></script>
+<script src="images.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

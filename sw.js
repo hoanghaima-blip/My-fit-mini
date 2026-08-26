@@ -1,14 +1,14 @@
-const CACHE_NAME = 'my-fit-mini-v4';
-const APP_VERSION = '4';
+const CACHE_NAME = 'my-fit-mini-v5';
+const APP_VERSION = '5';
 
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './styles.css?v=4',
-  './data.js?v=4',
-  './images.js?v=4',
-  './app.js?v=4',
+  './styles.css?v=5',
+  './data.js?v=5',
+  './images.js?v=5',
+  './app.js?v=5',
   './styles.css',
   './data.js',
   './images.js',

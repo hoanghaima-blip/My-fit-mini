@@ -396,8 +396,10 @@ async function run() {
     const cards = window.document.querySelectorAll('#history-list .history-card');
     assert(cards.length === 1, 'history card rendered');
     assert(cards[0].textContent.includes('Test Workout'), 'history shows workout name');
-    assert(cards[0].textContent.includes('Dự kiến'), 'history shows estimated');
-    assert(cards[0].textContent.includes('Thực tế'), 'history shows actual');
+    assert(cards[0].textContent.includes('Thời gian dự kiến'), 'history shows estimated');
+    assert(cards[0].textContent.includes('Thời gian thực tế'), 'history shows actual');
+    assert(cards[0].textContent.includes('Set dự kiến'), 'history shows planned sets');
+    assert(cards[0].textContent.includes('Set thực tế'), 'history shows actual sets');
     app.openHistoryDetail(0);
     const detail = window.document.getElementById('history-detail-overlay');
     assert(detail.style.display === 'flex', 'history detail overlay opens');
@@ -407,6 +409,85 @@ async function run() {
     pass('TEST 11: completed workout appears in history UI with detail');
   } catch (err) {
     fail('TEST 11', err);
+  }
+
+  // NEW: History UI is present on Home even when empty
+  try {
+    const { window } = loadApp();
+    resetStorage();
+    const section = window.document.getElementById('history-section');
+    const list = window.document.getElementById('history-list');
+    const jump = window.document.getElementById('jump-history-btn');
+    assert(!!section, 'history-section exists in DOM');
+    assert(!!list, 'history-list exists in DOM');
+    assert(!!jump, 'jump-history button exists');
+    assert(section.textContent.includes('Lịch sử tập'), 'section title visible');
+    window.MyFitApp.renderHistory();
+    assert(list.textContent.includes('Chưa có lịch sử') || list.textContent.includes('Hoàn thành'), 'empty state rendered');
+    pass('TEST 13: History UI visible on Home when empty');
+  } catch (err) {
+    fail('TEST 13', err);
+  }
+
+  // NEW: edit after history does not mutate snapshot
+  try {
+    const { window } = loadApp();
+    resetStorage();
+    installMiniWorkout(window);
+    const app = window.MyFitApp;
+    const D = window.MyFitData;
+    app.startWorkout(0);
+    app.finishWorkout();
+    const before = D.clone(D.loadHistory()[0]);
+    const workouts = app.getWorkouts();
+    workouts.test.exercises[0].name = 'Changed Later';
+    workouts.test.exercises[0].sets = 9;
+    workouts.test.exercises[0].reps = 99;
+    workouts.test.exercises[0].resistance = 99;
+    D.saveWorkouts(workouts);
+    const after = D.loadHistory()[0];
+    assert(after.exercises[0].snapshot.name === before.exercises[0].snapshot.name, 'edit does not change history name');
+    assert(after.exercises[0].snapshot.sets === before.exercises[0].snapshot.sets, 'edit does not change history sets');
+    assert(after.exercises[0].snapshot.reps === before.exercises[0].snapshot.reps, 'edit does not change history reps');
+    assert(after.exercises[0].snapshot.resistance === before.exercises[0].snapshot.resistance, 'edit does not change history resistance');
+    pass('TEST 14: edit exercise after history keeps snapshot immutable');
+  } catch (err) {
+    fail('TEST 14', err);
+  }
+
+  // NEW: reload keeps history
+  try {
+    const first = loadApp();
+    resetStorage();
+    installMiniWorkout(first.window);
+    first.window.MyFitApp.startWorkout(0);
+    first.window.MyFitApp.finishWorkout();
+    assert(first.window.MyFitData.loadHistory().length === 1, 'history saved');
+    first.dom.window.close();
+    const second = loadApp();
+    const history = second.window.MyFitData.loadHistory();
+    assert(history.length === 1, 'history remains after reload');
+    second.window.MyFitApp.renderHistory();
+    assert(second.window.document.querySelectorAll('#history-list .history-card').length === 1, 'history card rendered after reload');
+    pass('TEST 15: reload app keeps History UI data');
+    second.dom.window.close();
+  } catch (err) {
+    fail('TEST 15', err);
+  }
+
+  // NEW: version meta and history section in HTML source
+  try {
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
+    assert(html.includes('myfit-version" content="5"'), 'version meta is 5');
+    assert(html.includes('id="history-section"'), 'history-section in HTML');
+    assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
+    assert(html.includes('jump-history-btn'), 'jump history button in HTML');
+    assert(html.includes('myfit-ui-version'), 'safe cache refresh gate present');
+    const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+    assert(sw.includes('my-fit-mini-v5'), 'service worker cache v5');
+    pass('TEST 16: HTML/SW ship History UI + cache v5');
+  } catch (err) {
+    fail('TEST 16', err);
   }
 
   // NEW: edit form fields exist and textareas have no maxlength

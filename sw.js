@@ -1,24 +1,26 @@
-const CACHE_NAME = 'my-fit-mini-v8';
-const APP_VERSION = '8';
+const CACHE_NAME = 'my-fit-mini-v9';
+const APP_VERSION = '9';
 
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './styles.css?v=8',
-  './data.js?v=8',
-  './images.js?v=8',
-  './app.js?v=8',
+  './styles.css?v=9',
+  './data.js?v=9',
+  './images.js?v=9',
+  './app.js?v=9',
   './styles.css',
   './data.js',
   './images.js',
   './app.js',
   './sw.js',
   './assets/logo-header.png',
+  './assets/logo-mau-6.png',
   './assets/leg-curl-machine.jpg',
   './assets/welcome-background.jpg',
   './assets/icon-192.png',
-  './assets/icon-512.png'
+  './assets/icon-512.png',
+  './assets/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', event => {

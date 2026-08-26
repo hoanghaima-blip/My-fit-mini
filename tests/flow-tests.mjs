@@ -599,19 +599,20 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="8"'), 'version meta is 8');
+    assert(html.includes('myfit-version" content="9"'), 'version meta is 9');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
     assert(html.includes('jump-history-btn'), 'jump history button in HTML');
     assert(html.includes('myfit-ui-version'), 'safe cache refresh gate present');
     assert(html.includes('assets/logo-header.png'), 'app logo in HTML');
+    assert(html.includes('apple-touch-icon.png'), 'apple-touch-icon uses logo mau 6');
     assert(html.includes('Bắt đầu ngay'), 'welcome primary CTA');
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v8'), 'service worker cache v8');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v8 + logo');
+    assert(sw.includes('my-fit-mini-v9'), 'service worker cache v9');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v9 + logo mau 6');
   } catch (err) {
     fail('TEST 16', err);
   }

@@ -100,6 +100,35 @@
     });
   }
 
+  function getAppBasePath() {
+    if (typeof window === 'undefined' || !window.location) return './';
+    var path = window.location.pathname || '/';
+    if (path.endsWith('/')) return path;
+    if (/\.html?$/i.test(path)) return path.replace(/[^/]+$/, '');
+    // "/My-fit-mini" (no trailing slash) must resolve assets under "/My-fit-mini/"
+    return path + '/';
+  }
+
+  function toPublicUrl(src) {
+    var value = String(src || '');
+    if (!value) return '';
+    if (
+      value.indexOf('http') === 0 ||
+      value.indexOf('data:') === 0 ||
+      value.indexOf('blob:') === 0
+    ) {
+      return value;
+    }
+    if (value.indexOf('./') === 0) value = value.slice(2);
+    if (value.charAt(0) === '/') return value;
+    try {
+      if (typeof window !== 'undefined' && window.location && window.location.origin) {
+        return new URL(value, window.location.origin + getAppBasePath()).href;
+      }
+    } catch (err) {}
+    return value;
+  }
+
   function isStableImagePath(src) {
     var value = String(src || '');
     return (
@@ -122,7 +151,7 @@
         imageRef.indexOf('./') === 0 ||
         imageRef.indexOf('/') === 0
       ) {
-        return Promise.resolve(imageRef);
+        return Promise.resolve(toPublicUrl(imageRef));
       }
       return getImageObjectUrl(imageRef);
     }
@@ -136,9 +165,9 @@
 
     // Prefer repo/network paths so images work on every device.
     if (isStableImagePath(path) && path.indexOf('blob:') !== 0 && path.indexOf('data:') !== 0) {
-      return Promise.resolve(path);
+      return Promise.resolve(toPublicUrl(path));
     }
-    if (catalog) return Promise.resolve(catalog);
+    if (catalog) return Promise.resolve(toPublicUrl(catalog));
 
     if (imageId) {
       return getImageObjectUrl(imageId).then(function (url) {
@@ -166,6 +195,8 @@
     getImage: getImage,
     getImageObjectUrl: getImageObjectUrl,
     resolveImageSrc: resolveImageSrc,
+    toPublicUrl: toPublicUrl,
+    getAppBasePath: getAppBasePath,
     copyImage: copyImage,
     revokeObjectUrl: revokeObjectUrl,
     _memoryStore: memoryStore

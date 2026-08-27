@@ -90,6 +90,10 @@
   function setImageElement(imgEl, src) {
     if (!imgEl) return;
     if (src) {
+      imgEl.onerror = function () {
+        imgEl.removeAttribute('src');
+        imgEl.style.display = 'none';
+      };
       imgEl.src = src;
       imgEl.style.display = 'block';
     } else {
@@ -152,6 +156,15 @@
         var img = document.createElement('img');
         img.className = 'card-image';
         img.alt = '';
+        img.onerror = function () {
+          if (img.parentNode) {
+            var fallback = document.createElement('div');
+            fallback.className = 'card-image placeholder';
+            fallback.setAttribute('data-image-slot', '');
+            fallback.textContent = '🏋️';
+            img.replaceWith(fallback);
+          }
+        };
         img.src = src;
         slot.replaceWith(img);
       }).catch(function () {});
@@ -240,6 +253,15 @@
         var img = document.createElement('img');
         img.className = 'card-image';
         img.alt = '';
+        img.onerror = function () {
+          if (img.parentNode) {
+            var fallback = document.createElement('div');
+            fallback.className = 'card-image placeholder';
+            fallback.setAttribute('data-image-slot', '');
+            fallback.textContent = '🏋️';
+            img.replaceWith(fallback);
+          }
+        };
         img.src = src;
         slot.replaceWith(img);
       });

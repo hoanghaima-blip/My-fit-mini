@@ -2,11 +2,12 @@
  * Automated flow tests for My Fit Mini.
  * Run: node tests/flow-tests.mjs
  */
-import { readFileSync } from 'fs';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
+const { readFileSync, existsSync } = fs;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
@@ -487,7 +488,7 @@ async function run() {
     assert(!/romanian/i.test(exercises[0].name), 'Bai 1 is not RDL');
     assert(exercises[0].sets === 3, 'Leg Curl has 3 sets');
     assert(exercises[0].repsRange === '15–20' || exercises[0].reps >= 15, 'Leg Curl reps 15-20');
-    assert(String(exercises[0].image).indexOf('leg-curl') >= 0, 'Leg Curl has illustration image');
+    assert(String(exercises[0].image).indexOf('exercises/seated-leg-curl') >= 0 || String(exercises[0].image).indexOf('leg-curl') >= 0, 'Leg Curl has illustration image');
     assert(exercises[0].notes.indexOf('đùi sau') >= 0, 'Leg Curl notes mention hamstrings');
     // migrate from old BSS-first storage
     const D = fresh.window.MyFitData;
@@ -599,7 +600,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="10"'), 'version meta is 10');
+    assert(html.includes('myfit-version" content="11"'), 'version meta is 11');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
@@ -611,8 +612,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v10'), 'service worker cache v9');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v10 + exact logo mau 6');
+    assert(sw.includes('my-fit-mini-v11'), 'service worker cache v9');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v11 + exercise assets');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -633,6 +634,41 @@ async function run() {
     pass('TEST 12: edit/replace forms include all fields + unlimited textareas');
   } catch (err) {
     fail('TEST 12', err);
+  }
+
+  // NEW: every default exercise has a stable repo asset image (cross-device)
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const Img = window.MyFitImages;
+    const workouts = D.loadWorkouts();
+    let total = 0;
+    const missing = [];
+    for (const workoutId of Object.keys(workouts)) {
+      for (const exercise of workouts[workoutId].exercises) {
+        total += 1;
+        assert(D.isStableAssetPath(exercise.image), exercise.name + ' uses stable asset path');
+        assert(exercise.image.indexOf('assets/exercises/') === 0, exercise.name + ' under assets/exercises');
+        const filePath = join(root, exercise.image);
+        assert(existsSync(filePath), exercise.name + ' file exists: ' + exercise.image);
+        const resolved = await Img.resolveImageSrc(exercise);
+        assert(resolved === exercise.image, exercise.name + ' resolves to asset, not blob/id');
+        // imageId-only stored row still resolves via catalog
+        const idOnly = { id: exercise.id, name: exercise.name, image: '', imageId: 'img-missing-on-other-device' };
+        const viaCatalog = await Img.resolveImageSrc(idOnly);
+        assert(viaCatalog === exercise.image, exercise.name + ' catalog fallback works without IndexedDB');
+      }
+    }
+    assert(total === 15, 'checked all 15 default exercises, got ' + total);
+    assert(Object.keys(D.EXERCISE_IMAGE_ASSETS).length === 15, 'catalog has 15 entries');
+    // SW precaches exercise assets
+    const sw = readFileSync(join(root, 'sw.js'), 'utf8');
+    assert((sw.match(/assets\/exercises\//g) || []).length === 15, 'SW caches 15 exercise images');
+    pass('TEST 20: all exercises use repo assets (no device-only image deps)');
+    dom.window.close();
+  } catch (err) {
+    fail('TEST 20', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

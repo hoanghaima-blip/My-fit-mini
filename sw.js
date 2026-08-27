@@ -1,14 +1,14 @@
-const CACHE_NAME = 'my-fit-mini-v10';
-const APP_VERSION = '10';
+const CACHE_NAME = 'my-fit-mini-v11';
+const APP_VERSION = '11';
 
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './styles.css?v=10',
-  './data.js?v=10',
-  './images.js?v=10',
-  './app.js?v=10',
+  './styles.css?v=11',
+  './data.js?v=11',
+  './images.js?v=11',
+  './app.js?v=11',
   './styles.css',
   './data.js',
   './images.js',
@@ -20,7 +20,22 @@ const ASSETS = [
   './assets/welcome-background.jpg',
   './assets/icon-192.png',
   './assets/icon-512.png',
-  './assets/apple-touch-icon.png'
+  './assets/apple-touch-icon.png',
+  './assets/exercises/banded-abduction.jpg',
+  './assets/exercises/bulgarian-split-squat.jpg',
+  './assets/exercises/cable-kickback.jpg',
+  './assets/exercises/dumbbell-shoulder-press.jpg',
+  './assets/exercises/frog-pump.jpg',
+  './assets/exercises/glute-bridge-band-abduction.jpg',
+  './assets/exercises/hip-thrust.jpg',
+  './assets/exercises/lat-pulldown.jpg',
+  './assets/exercises/lateral-raise.jpg',
+  './assets/exercises/seated-cable-row.jpg',
+  './assets/exercises/seated-leg-curl.jpg',
+  './assets/exercises/side-lying-hip-abduction.jpg',
+  './assets/exercises/single-leg-glute-bridge.jpg',
+  './assets/exercises/step-up.jpg',
+  './assets/exercises/sumo-squat.jpg',
 ];
 
 self.addEventListener('install', event => {

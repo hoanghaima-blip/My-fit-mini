@@ -66,6 +66,63 @@
     return { resistance: 0, resistanceType: 'kg' };
   }
 
+  // Stable repo assets — work on any device without IndexedDB/local image cache.
+  var EXERCISE_IMAGE_ASSETS = {
+    'a-seated-leg-curl': 'assets/exercises/seated-leg-curl.jpg',
+    'a-bulgarian-split-squat': 'assets/exercises/bulgarian-split-squat.jpg',
+    'a-sumo-squat': 'assets/exercises/sumo-squat.jpg',
+    'a-cable-kickback': 'assets/exercises/cable-kickback.jpg',
+    'a-glute-bridge-band-abduction': 'assets/exercises/glute-bridge-band-abduction.jpg',
+    'a-extended-range-side-lying-hip-abduction-on-bench': 'assets/exercises/side-lying-hip-abduction.jpg',
+    'b-lat-pulldown': 'assets/exercises/lat-pulldown.jpg',
+    'b-seated-cable-row': 'assets/exercises/seated-cable-row.jpg',
+    'b-dumbbell-shoulder-press': 'assets/exercises/dumbbell-shoulder-press.jpg',
+    'b-lateral-raise': 'assets/exercises/lateral-raise.jpg',
+    'c-hip-thrust': 'assets/exercises/hip-thrust.jpg',
+    'c-step-up': 'assets/exercises/step-up.jpg',
+    'c-banded-abduction': 'assets/exercises/banded-abduction.jpg',
+    'c-single-leg-glute-bridge': 'assets/exercises/single-leg-glute-bridge.jpg',
+    'c-frog-pump': 'assets/exercises/frog-pump.jpg'
+  };
+
+  var EXERCISE_IMAGE_BY_NAME = {
+    'seated leg curl / leg curl máy': 'assets/exercises/seated-leg-curl.jpg',
+    'seated leg curl': 'assets/exercises/seated-leg-curl.jpg',
+    'leg curl máy': 'assets/exercises/seated-leg-curl.jpg',
+    'bulgarian split squat': 'assets/exercises/bulgarian-split-squat.jpg',
+    'sumo squat': 'assets/exercises/sumo-squat.jpg',
+    'cable kickback': 'assets/exercises/cable-kickback.jpg',
+    'glute bridge + band abduction': 'assets/exercises/glute-bridge-band-abduction.jpg',
+    'extended range side-lying hip abduction on bench': 'assets/exercises/side-lying-hip-abduction.jpg',
+    'lat pulldown': 'assets/exercises/lat-pulldown.jpg',
+    'seated cable row': 'assets/exercises/seated-cable-row.jpg',
+    'dumbbell shoulder press': 'assets/exercises/dumbbell-shoulder-press.jpg',
+    'lateral raise': 'assets/exercises/lateral-raise.jpg',
+    'hip thrust': 'assets/exercises/hip-thrust.jpg',
+    'step-up': 'assets/exercises/step-up.jpg',
+    'banded abduction': 'assets/exercises/banded-abduction.jpg',
+    'single-leg glute bridge': 'assets/exercises/single-leg-glute-bridge.jpg',
+    'frog pump': 'assets/exercises/frog-pump.jpg'
+  };
+
+  function isStableAssetPath(src) {
+    var value = String(src || '');
+    return (
+      value.indexOf('assets/') === 0 ||
+      value.indexOf('./assets/') === 0
+    );
+  }
+
+  function catalogImageForExercise(exercise) {
+    if (!exercise) return '';
+    if (exercise.id && EXERCISE_IMAGE_ASSETS[exercise.id]) {
+      return EXERCISE_IMAGE_ASSETS[exercise.id];
+    }
+    var nameKey = String(exercise.name || '').trim().toLowerCase();
+    if (EXERCISE_IMAGE_BY_NAME[nameKey]) return EXERCISE_IMAGE_BY_NAME[nameKey];
+    return '';
+  }
+
   function createExercise(workoutId, legacyRow, extras) {
     var parsed = parseLegacyMeta(legacyRow[1]);
     var resistance = parseLegacyResistance(legacyRow[2]);
@@ -86,6 +143,9 @@
         exercise[key] = extras[key];
       });
     }
+    if (!exercise.image) {
+      exercise.image = catalogImageForExercise(exercise);
+    }
     return exercise;
   }
 
@@ -93,7 +153,7 @@
     return {
       id: 'a-seated-leg-curl',
       name: 'Seated Leg Curl / Leg Curl máy',
-      image: 'assets/leg-curl-machine.jpg',
+      image: EXERCISE_IMAGE_ASSETS['a-seated-leg-curl'],
       imageId: '',
       instructions: 'Tư thế bắt đầu → gập gối kéo con lăn về phía mông → trở về chậm. Bài khởi động/kích hoạt đùi sau, không phải bài chính.',
       notes: 'Tập nhẹ, kiểm soát động tác, tập trung cảm nhận đùi sau.',
@@ -220,8 +280,12 @@
     var firstName = String(first.name || '');
     if (/leg\s*curl/i.test(firstName)) {
       var changed = false;
-      if (!first.image && !first.imageId) {
-        first.image = 'assets/leg-curl-machine.jpg';
+      var catalog = catalogImageForExercise(first) || EXERCISE_IMAGE_ASSETS['a-seated-leg-curl'];
+      if (!isStableAssetPath(first.image)) {
+        first.image = catalog;
+        changed = true;
+      } else if (first.image === 'assets/leg-curl-machine.jpg') {
+        first.image = catalog;
         changed = true;
       }
       if (!first.repsRange) {
@@ -256,6 +320,33 @@
     return { workouts: workouts, changed: true };
   }
 
+  // Point known exercises at repo assets so images work on any device.
+  // Does not clear History or custom user-uploaded imageId blobs.
+  function migrateExerciseAssetImages(workouts) {
+    if (!workouts || typeof workouts !== 'object') {
+      return { workouts: workouts, changed: false };
+    }
+    var changed = false;
+    Object.keys(workouts).forEach(function (workoutId) {
+      var workout = workouts[workoutId];
+      if (!workout || !Array.isArray(workout.exercises)) return;
+      workout.exercises.forEach(function (exercise) {
+        var catalog = catalogImageForExercise(exercise);
+        if (!catalog) return;
+        if (exercise.image === 'assets/leg-curl-machine.jpg') {
+          exercise.image = catalog;
+          changed = true;
+          return;
+        }
+        if (!isStableAssetPath(exercise.image)) {
+          exercise.image = catalog;
+          changed = true;
+        }
+      });
+    });
+    return { workouts: workouts, changed: changed };
+  }
+
   function loadWorkouts() {
     var stored = readJson(STORAGE_KEYS.workouts, null);
     var migrated = migrateLegacyWorkouts(stored);
@@ -264,7 +355,9 @@
     workouts = legCurlResult.workouts;
     var rdlResult = migrateGlutesARemoveRomanianDeadlift(workouts);
     workouts = rdlResult.workouts;
-    if (legCurlResult.changed || rdlResult.changed || !stored) saveWorkouts(workouts);
+    var imageResult = migrateExerciseAssetImages(workouts);
+    workouts = imageResult.workouts;
+    if (legCurlResult.changed || rdlResult.changed || imageResult.changed || !stored) saveWorkouts(workouts);
     return workouts;
   }
 
@@ -456,6 +549,9 @@
     WEEK_DAYS: WEEK_DAYS,
     WELCOME_BACKGROUND_IMAGE: WELCOME_BACKGROUND_IMAGE,
     DEFAULT_WORKOUTS: DEFAULT_WORKOUTS,
+    EXERCISE_IMAGE_ASSETS: EXERCISE_IMAGE_ASSETS,
+    catalogImageForExercise: catalogImageForExercise,
+    isStableAssetPath: isStableAssetPath,
     clone: clone,
     loadWorkouts: loadWorkouts,
     saveWorkouts: saveWorkouts,

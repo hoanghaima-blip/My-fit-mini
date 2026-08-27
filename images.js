@@ -100,6 +100,17 @@
     });
   }
 
+  function isStableImagePath(src) {
+    var value = String(src || '');
+    return (
+      value.indexOf('http') === 0 ||
+      value.indexOf('assets/') === 0 ||
+      value.indexOf('./assets/') === 0 ||
+      value.indexOf('./') === 0 ||
+      value.indexOf('/') === 0
+    );
+  }
+
   function resolveImageSrc(imageRef) {
     if (!imageRef) return Promise.resolve('');
     if (typeof imageRef === 'string') {
@@ -115,8 +126,29 @@
       }
       return getImageObjectUrl(imageRef);
     }
-    if (imageRef.imageId) return getImageObjectUrl(imageRef.imageId);
-    if (imageRef.image) return resolveImageSrc(imageRef.image);
+
+    var path = imageRef.image || '';
+    var imageId = imageRef.imageId || '';
+    var catalog = '';
+    if (typeof window !== 'undefined' && window.MyFitData && typeof window.MyFitData.catalogImageForExercise === 'function') {
+      catalog = window.MyFitData.catalogImageForExercise(imageRef) || '';
+    }
+
+    // Prefer repo/network paths so images work on every device.
+    if (isStableImagePath(path) && path.indexOf('blob:') !== 0 && path.indexOf('data:') !== 0) {
+      return Promise.resolve(path);
+    }
+    if (catalog) return Promise.resolve(catalog);
+
+    if (imageId) {
+      return getImageObjectUrl(imageId).then(function (url) {
+        if (url) return url;
+        if (path) return resolveImageSrc(path);
+        return '';
+      });
+    }
+
+    if (path) return resolveImageSrc(path);
     return Promise.resolve('');
   }
 

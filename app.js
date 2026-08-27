@@ -983,10 +983,16 @@
   }
 
   function writeCurrentSetResistanceToUi(log) {
-    if (!els.wSetResistance || !log) return;
-    els.wSetResistance.value = log.resistance != null ? log.resistance : 0;
-    if (els.wSetResistanceType) els.wSetResistanceType.value = log.resistanceType || 'kg';
-    if (els.wResistanceChip) els.wResistanceChip.textContent = formatResistanceChip(log);
+    if (!log) return;
+    if (els.wSetResistance) {
+      els.wSetResistance.value = log.resistance != null ? log.resistance : 0;
+    }
+    if (els.wSetResistanceType) {
+      els.wSetResistanceType.value = log.resistanceType || 'kg';
+    }
+    if (els.wResistanceChip) {
+      els.wResistanceChip.textContent = formatResistanceChip(log);
+    }
   }
 
   function syncUiResistanceIntoSession() {

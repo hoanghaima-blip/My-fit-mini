@@ -744,14 +744,86 @@ async function run() {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
     assert(html.includes('home-back-btn'), 'back home button markup');
     assert(html.includes('add-exercise-form'), 'add exercise form markup');
-    assert(html.includes('w-set-resistance'), 'per-set resistance input');
+    assert(html.includes('w-resistance-chip'), 'optional resistance chip markup');
+    assert(html.includes('w-resistance-editor'), 'resistance editor markup');
+    assert(html.includes('w-set-resistance'), 'per-set resistance input inside editor');
+    assert(html.includes('workout-actions'), 'sticky workout actions bar');
+    assert(html.includes('complete-set-btn'), 'complete set primary action');
     assert(html.includes('library-add-btn'), 'library add button');
+    assert(/w-resistance-editor[^>]*\bhidden\b/.test(html) || html.includes('id="w-resistance-editor" hidden'), 'resistance editor starts hidden');
 
     pass('TEST 21: order + per-set logs + supplemental + library');
     first.dom.window.close();
     second.dom.window.close();
   } catch (err) {
     fail('TEST 21', err);
+  }
+
+  try {
+    const { window, dom } = loadApp();
+    resetStorage();
+    installMiniWorkout(window);
+    const app = window.MyFitApp;
+    const doc = window.document;
+
+    const chip = doc.getElementById('w-resistance-chip');
+    const editor = doc.getElementById('w-resistance-editor');
+    const actions = doc.getElementById('workout-actions');
+    const completeBtn = doc.getElementById('complete-set-btn');
+    assert(chip && editor && actions && completeBtn, 'workout resistance + action markup present');
+    assert(editor.hidden, 'editor hidden before workout');
+
+    app.startWorkout(0);
+    let session = app.getActiveSession();
+    assert(session.exercises[0].setLogs[0].resistance === 5, 'set1 starts at default 5');
+    assert(editor.hidden, 'editor stays closed on enter workout');
+    assert(chip.textContent.includes('5'), 'chip shows default load');
+    assert(completeBtn.textContent === 'Hoàn thành SET', 'primary CTA is Hoàn thành SET');
+    assert(actions.querySelector('#complete-set-btn'), 'primary action inside sticky bar');
+
+    // Complete SET 1 without touching resistance
+    app.completeSet();
+    session = app.getActiveSession();
+    assert(session.exercises[0].setLogs[0].completed === true, 'set1 completed');
+    assert(session.exercises[0].setLogs[0].resistance === 5, 'set1 kept default without edit');
+    assert(session.exercises[0].snapshot.resistance === 5, 'exercise default unchanged after set1');
+    app.finishRestAdvance();
+    session = app.getActiveSession();
+    assert(session.currentSet === 2, 'advanced to set 2');
+    assert(session.exercises[0].setLogs[1].resistance === 5, 'set2 inherits set1 load');
+    assert(editor.hidden, 'editor closed on set 2 view');
+
+    // Edit SET 2 via chip → input → Xong
+    chip.click();
+    assert(!editor.hidden, 'editor opens after chip tap');
+    doc.getElementById('w-set-resistance').value = '12';
+    doc.getElementById('w-set-resistance').dispatchEvent(new window.Event('change'));
+    doc.getElementById('w-resistance-done-btn').click();
+    assert(editor.hidden, 'editor closes after Xong');
+    session = app.getActiveSession();
+    assert(session.exercises[0].setLogs[1].resistance === 12, 'set2 edited to 12');
+    assert(session.exercises[0].snapshot.resistance === 5, 'exercise default still 5 after edit');
+
+    app.completeSet();
+    app.finishRestAdvance();
+    session = app.getActiveSession();
+    assert(session.currentSet === 3, 'advanced to set 3');
+    assert(session.exercises[0].setLogs[2].resistance === 12, 'set3 inherits edited set2 load');
+
+    app.completeSet();
+    session = app.getActiveSession();
+    assert(session.phase === 'rest-exercise', 'exercise rest after last set');
+    app.finishRestAdvance();
+    session = app.getActiveSession();
+    assert(session.currentExerciseIndex === 1, 'moved to exercise 2');
+    assert(session.currentSet === 1, 'exercise 2 starts at set 1');
+    assert(doc.getElementById('wprog').textContent.includes('Bài 2/'), 'UI shows Bài 2');
+    assert(completeBtn.offsetParent !== null || completeBtn.isConnected, 'complete button still in DOM');
+
+    pass('TEST 22: optional resistance chip + sticky complete flow');
+    dom.window.close();
+  } catch (err) {
+    fail('TEST 22', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

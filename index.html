@@ -277,29 +277,37 @@
 
 <div class="workout" id="workout-overlay">
   <div class="workout-inner">
-    <button type="button" class="closex" id="workout-close-btn">×</button>
-    <div id="wprog" class="progress"></div>
-    <img id="wimage" class="workout-image" alt="" style="display:none">
-    <h2 id="wname"></h2>
-    <div id="wmeta" class="meta"></div>
-    <div id="wset-display" class="set-display"></div>
-    <div id="wreps-display" class="reps-display"></div>
-    <div class="set-resistance-box">
-      <label for="w-set-resistance">Mức kháng lực SET này</label>
-      <div class="set-resistance-row">
-        <input id="w-set-resistance" type="number" min="0" step="0.5" inputmode="decimal">
-        <select id="w-set-resistance-type">
-          <option value="kg">kg</option>
-          <option value="band">band</option>
-          <option value="bodyweight">bodyweight</option>
-        </select>
+    <div class="workout-scroll">
+      <button type="button" class="closex" id="workout-close-btn">×</button>
+      <div id="wprog" class="progress"></div>
+      <img id="wimage" class="workout-image" alt="" style="display:none">
+      <h2 id="wname"></h2>
+      <div id="wmeta" class="meta"></div>
+      <div id="wset-display" class="set-display"></div>
+      <div id="wreps-display" class="reps-display"></div>
+      <div class="set-resistance-area">
+        <div class="set-resistance-label">Mức tạ</div>
+        <button type="button" class="resistance-chip" id="w-resistance-chip" aria-label="Chỉnh mức tạ SET này">—</button>
+        <div class="set-resistance-editor" id="w-resistance-editor" hidden>
+          <div class="set-resistance-row">
+            <input id="w-set-resistance" type="number" min="0" step="0.5" inputmode="decimal" tabindex="-1">
+            <select id="w-set-resistance-type" tabindex="-1">
+              <option value="kg">kg</option>
+              <option value="band">band</option>
+              <option value="bodyweight">bodyweight</option>
+            </select>
+          </div>
+          <p class="set-resistance-hint">Chỉ đổi SET hiện tại. Không đổi mức mặc định của bài.</p>
+          <button type="button" class="btn-secondary resistance-done-btn" id="w-resistance-done-btn">Xong</button>
+        </div>
       </div>
-      <p class="set-resistance-hint">Chỉ đổi SET hiện tại. Không đổi mức mặc định của bài.</p>
+      <div id="wset" class="note"></div>
+      <button type="button" class="btn-secondary workout-secondary-action" id="workout-add-exercise-btn">+ Thêm bài tập vào buổi này</button>
     </div>
-    <div id="wset" class="note"></div>
-    <button type="button" class="complete" id="complete-set-btn">Hoàn thành SET</button>
-    <button type="button" class="btn-secondary" id="complete-exercise-btn">Hoàn thành bài tập</button>
-    <button type="button" class="btn-secondary" id="workout-add-exercise-btn">+ Thêm bài tập vào buổi này</button>
+    <div class="workout-actions" id="workout-actions">
+      <button type="button" class="complete" id="complete-set-btn">Hoàn thành SET</button>
+      <button type="button" class="btn-secondary" id="complete-exercise-btn">Hoàn thành bài tập</button>
+    </div>
   </div>
 </div>
 

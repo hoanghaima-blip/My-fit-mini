@@ -47,6 +47,9 @@
     wrepsDisplay: document.getElementById('wreps-display'),
     wSetResistance: document.getElementById('w-set-resistance'),
     wSetResistanceType: document.getElementById('w-set-resistance-type'),
+    wResistanceChip: document.getElementById('w-resistance-chip'),
+    wResistanceEditor: document.getElementById('w-resistance-editor'),
+    wResistanceDoneBtn: document.getElementById('w-resistance-done-btn'),
     restOverlay: document.getElementById('rest-overlay'),
     restLabel: document.getElementById('rest-label'),
     restTimer: document.getElementById('rest-timer'),
@@ -927,6 +930,50 @@
     return false;
   }
 
+  function formatResistanceChip(log) {
+    return D.formatResistance({
+      resistance: log && log.resistance != null ? log.resistance : 0,
+      resistanceType: (log && log.resistanceType) || 'kg'
+    });
+  }
+
+  function isResistanceEditorOpen() {
+    return !!(els.wResistanceEditor && !els.wResistanceEditor.hidden);
+  }
+
+  function closeResistanceEditor(options) {
+    options = options || {};
+    if (isResistanceEditorOpen() && options.sync !== false) {
+      syncUiResistanceIntoSession();
+      persistSession();
+    }
+    if (els.wResistanceEditor) els.wResistanceEditor.hidden = true;
+    if (els.wSetResistance) els.wSetResistance.blur();
+    if (els.wSetResistanceType) els.wSetResistanceType.blur();
+    updateResistanceChipLabel();
+  }
+
+  function openResistanceEditor() {
+    var current = getCurrentExercise();
+    if (!current || !activeSession) return;
+    D.ensureSetLogs(current);
+    var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
+    var log = current.setLogs[setIndex] || current.setLogs[0];
+    writeCurrentSetResistanceToUi(log);
+    if (els.wResistanceEditor) els.wResistanceEditor.hidden = false;
+    // Do not autofocus — optional edit only.
+  }
+
+  function updateResistanceChipLabel() {
+    if (!els.wResistanceChip || !activeSession) return;
+    var current = getCurrentExercise();
+    if (!current) return;
+    D.ensureSetLogs(current);
+    var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
+    var log = current.setLogs[setIndex] || current.setLogs[0];
+    els.wResistanceChip.textContent = formatResistanceChip(log);
+  }
+
   function readCurrentSetResistanceFromUi() {
     if (!els.wSetResistance) return null;
     return {
@@ -939,11 +986,14 @@
     if (!els.wSetResistance || !log) return;
     els.wSetResistance.value = log.resistance != null ? log.resistance : 0;
     if (els.wSetResistanceType) els.wSetResistanceType.value = log.resistanceType || 'kg';
+    if (els.wResistanceChip) els.wResistanceChip.textContent = formatResistanceChip(log);
   }
 
   function syncUiResistanceIntoSession() {
     var current = getCurrentExercise();
     if (!current || !activeSession) return;
+    // Only apply editor values when editor is open (user chose to edit).
+    if (!isResistanceEditorOpen()) return;
     D.ensureSetLogs(current);
     var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
     if (!current.setLogs[setIndex]) return;
@@ -951,6 +1001,21 @@
     if (!values) return;
     current.setLogs[setIndex].resistance = values.resistance;
     current.setLogs[setIndex].resistanceType = values.resistanceType;
+  }
+
+  function updatePrimaryActionLabel() {
+    var btn = document.getElementById('complete-set-btn');
+    if (!btn || !activeSession) return;
+    var current = getCurrentExercise();
+    if (!current) return;
+    var plannedSets = current.snapshot.sets;
+    var isLastSet = activeSession.currentSet >= plannedSets;
+    var isLastExercise = activeSession.currentExerciseIndex >= activeSession.exercises.length - 1;
+    if (isLastSet && isLastExercise) {
+      btn.textContent = 'Hoàn thành buổi tập';
+    } else {
+      btn.textContent = 'Hoàn thành SET';
+    }
   }
 
   function showWorkoutView() {
@@ -967,7 +1032,9 @@
     els.wset.textContent = [snap.instructions, snap.notes].filter(Boolean).join('\n\n');
     els.wsetDisplay.textContent = 'SET ' + activeSession.currentSet + ' / ' + snap.sets;
     els.wrepsDisplay.textContent = snap.reps + ' REPS';
+    if (els.wResistanceEditor) els.wResistanceEditor.hidden = true;
     writeCurrentSetResistanceToUi(log);
+    updatePrimaryActionLabel();
     applyImageToElement(els.wimage, snap);
     hideOverlay(els.restOverlay);
     hideOverlay(els.completionOverlay);
@@ -996,7 +1063,10 @@
     var current = getCurrentExercise();
     if (!current || !activeSession) return;
     D.ensureSetLogs(current);
-    syncUiResistanceIntoSession();
+    if (isResistanceEditorOpen()) {
+      syncUiResistanceIntoSession();
+      closeResistanceEditor({ sync: false });
+    }
     var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
     var log = current.setLogs[setIndex];
     if (log) {
@@ -1021,6 +1091,7 @@
     }
     completeExercise(false);
   }
+
   function completeExercise(skipSetRest) {
     var current = getCurrentExercise();
     if (!current || !activeSession) return;
@@ -1207,21 +1278,40 @@
       });
     }
 
+    if (els.wResistanceChip) {
+      els.wResistanceChip.addEventListener('click', function () {
+        if (!activeSession || activeSession.phase === 'complete') return;
+        if (isResistanceEditorOpen()) {
+          closeResistanceEditor();
+          return;
+        }
+        openResistanceEditor();
+      });
+    }
+    if (els.wResistanceDoneBtn) {
+      els.wResistanceDoneBtn.addEventListener('click', function () {
+        closeResistanceEditor();
+        persistSession();
+      });
+    }
     if (els.wSetResistance) {
       els.wSetResistance.addEventListener('change', function () {
         syncUiResistanceIntoSession();
+        updateResistanceChipLabel();
         persistSession();
       });
     }
     if (els.wSetResistanceType) {
       els.wSetResistanceType.addEventListener('change', function () {
         syncUiResistanceIntoSession();
+        updateResistanceChipLabel();
         persistSession();
       });
     }
 
     document.getElementById('complete-set-btn').addEventListener('click', completeSet);
     document.getElementById('complete-exercise-btn').addEventListener('click', function () {
+      if (isResistanceEditorOpen()) closeResistanceEditor();
       completeExercise(true);
     });
     document.getElementById('workout-close-btn').addEventListener('click', closeWorkout);

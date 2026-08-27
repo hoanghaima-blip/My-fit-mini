@@ -4,14 +4,18 @@
   var D = window.MyFitData;
   var Img = window.MyFitImages;
   var workouts = D.loadWorkouts();
+  var library = D.loadLibrary();
   var currentWorkoutId = D.loadLastDay() || 'a';
   var selectedExerciseIndex = 0;
+  var selectedLibraryIndex = -1;
+  var pickMode = ''; // 'session' | 'library-detail'
   var activeSession = D.loadActiveSession();
   var restTimerId = null;
   var resumePromptShown = false;
   var formImageState = {
     edit: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
-    replace: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' }
+    replace: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
+    add: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' }
   };
 
   var els = {
@@ -19,6 +23,7 @@
     welcomeBg: document.getElementById('welcome-bg'),
     appHome: document.getElementById('app-home'),
     libraryScreen: document.getElementById('library-screen'),
+    libraryList: document.getElementById('library-list'),
     title: document.getElementById('hero-title'),
     meta: document.getElementById('hero-meta'),
     list: document.getElementById('exercise-list'),
@@ -40,6 +45,8 @@
     wimage: document.getElementById('wimage'),
     wsetDisplay: document.getElementById('wset-display'),
     wrepsDisplay: document.getElementById('wreps-display'),
+    wSetResistance: document.getElementById('w-set-resistance'),
+    wSetResistanceType: document.getElementById('w-set-resistance-type'),
     restOverlay: document.getElementById('rest-overlay'),
     restLabel: document.getElementById('rest-label'),
     restTimer: document.getElementById('rest-timer'),
@@ -47,11 +54,28 @@
     completionStats: document.getElementById('completion-stats'),
     editOverlay: document.getElementById('edit-overlay'),
     replaceOverlay: document.getElementById('replace-overlay'),
+    addExerciseOverlay: document.getElementById('add-exercise-overlay'),
+    pickExerciseOverlay: document.getElementById('pick-exercise-overlay'),
+    pickExerciseList: document.getElementById('pick-exercise-list'),
+    pickExerciseTitle: document.getElementById('pick-exercise-title'),
+    pickExerciseIntro: document.getElementById('pick-exercise-intro'),
+    addToScheduleOverlay: document.getElementById('add-to-schedule-overlay'),
     editForm: document.getElementById('edit-form'),
     replaceForm: document.getElementById('replace-form'),
+    addExerciseForm: document.getElementById('add-exercise-form'),
     historyDetailOverlay: document.getElementById('history-detail-overlay'),
     historyDetailContent: document.getElementById('history-detail-content')
   };
+
+  function persistLibrary() {
+    D.saveLibrary(library);
+  }
+
+  function getDisplayedExercises() {
+    var workout = getWorkout(currentWorkoutId);
+    if (!workout) return [];
+    return D.getOrderedWorkoutExercises(workout);
+  }
 
   function getWorkout(workoutId) {
     return workouts[workoutId];
@@ -112,9 +136,10 @@
   function renderHero() {
     var workout = getWorkout(currentWorkoutId);
     if (!workout) return;
-    var estimated = D.estimateWorkoutSeconds(workout);
+    var exercises = getDisplayedExercises();
+    var estimated = D.estimateWorkoutSeconds({ exercises: exercises });
     els.title.textContent = workout.title;
-    els.meta.textContent = workout.exercises.length + ' bài • khoảng ' + D.formatDuration(estimated);
+    els.meta.textContent = exercises.length + ' bài • khoảng ' + D.formatDuration(estimated);
     D.saveLastDay(currentWorkoutId);
   }
 
@@ -124,8 +149,9 @@
 
   function renderList() {
     var workout = getWorkout(currentWorkoutId);
-    if (!workout) return;
-    els.list.innerHTML = workout.exercises.map(function (exercise, index) {
+    if (!workout || !els.list) return;
+    var exercises = getDisplayedExercises();
+    els.list.innerHTML = exercises.map(function (exercise, index) {
       return (
         '<div class="card">' +
           '<div class="card-top">' +
@@ -137,6 +163,10 @@
               (exercise.instructions ? '<div class="note">' + escapeHtml(exercise.instructions) + '</div>' : '') +
               (exercise.notes ? '<div class="note">' + escapeHtml(exercise.notes) + '</div>' : '') +
             '</div>' +
+            '<div class="order-btns">' +
+              '<button type="button" data-action="move-up" data-index="' + index + '" aria-label="Đưa lên">↑</button>' +
+              '<button type="button" data-action="move-down" data-index="' + index + '" aria-label="Đưa xuống">↓</button>' +
+            '</div>' +
           '</div>' +
           '<div class="card-actions">' +
             '<button type="button" data-action="edit" data-index="' + index + '">Sửa</button>' +
@@ -147,7 +177,7 @@
     }).join('');
 
     var cards = els.list.querySelectorAll('.card');
-    workout.exercises.forEach(function (exercise, index) {
+    exercises.forEach(function (exercise, index) {
       var slot = cards[index] && cards[index].querySelector('[data-image-slot]');
       if (!slot) return;
       Img.resolveImageSrc(exercise).then(function (src) {
@@ -171,6 +201,29 @@
     });
   }
 
+  function moveDisplayedExercise(index, direction) {
+    var workout = getWorkout(currentWorkoutId);
+    if (!workout) return;
+    var exercises = getDisplayedExercises();
+    var target = index + direction;
+    if (target < 0 || target >= exercises.length) return;
+    var swapped = exercises.slice();
+    var tmp = swapped[index];
+    swapped[index] = swapped[target];
+    swapped[target] = tmp;
+    D.setDayOrder(currentWorkoutId, swapped.map(function (ex) { return ex.id; }));
+    renderAll();
+  }
+
+  function saveDisplayedOrderAsDefault() {
+    var workout = getWorkout(currentWorkoutId);
+    if (!workout) return;
+    var ordered = getDisplayedExercises();
+    workout.exercises = ordered.slice();
+    persistWorkouts();
+    D.clearDayOrder(currentWorkoutId);
+    renderAll();
+  }
   function renderHistory() {
     if (!els.historyList) return;
     var history = D.loadHistory();
@@ -223,23 +276,40 @@
       '<div class="history-row"><span>Sets planned / actual</span><strong>' + summary.plannedSets + ' / ' + summary.actualSets + '</strong></div>' +
       '<div class="history-detail-list">';
 
-    entry.exercises.forEach(function (item, i) {
-      var snap = item.snapshot || {};
-      var status = item.completionStatus || 'pending';
-      var resistance = {
-        resistance: item.actualResistance != null ? item.actualResistance : snap.resistance,
-        resistanceType: item.plannedResistanceType || snap.resistanceType || 'kg'
-      };
-      html +=
-        '<div class="history-exercise" data-history-ex="' + i + '">' +
-          placeholderImageHtml('card-image') +
-          '<div class="name">' + (i + 1) + '. ' + escapeHtml(snap.name || 'Bài tập') + '</div>' +
-          '<div class="meta">Planned: ' + (item.plannedSets || snap.sets || 0) + ' × ' + (item.plannedReps || snap.reps || 0) + '</div>' +
-          '<div class="meta">Actual sets: ' + (item.actualSetsCompleted || 0) + '</div>' +
-          '<div class="meta">Resistance: ' + escapeHtml(D.formatResistance(resistance)) + '</div>' +
-          '<span class="status-pill ' + escapeHtml(status) + '">' + escapeHtml(D.completionStatusLabel(status)) + '</span>' +
-        '</div>';
-    });
+    function renderHistoryItems(items, heading) {
+      if (!items.length) return;
+      html += '<div class="history-group-title">' + escapeHtml(heading) + '</div>';
+      items.forEach(function (item) {
+        var globalIndex = entry.exercises.indexOf(item);
+        var snap = item.snapshot || {};
+        var status = item.completionStatus || 'pending';
+        var ensured = D.ensureSetLogs(D.clone(item));
+        var setLines = (ensured.setLogs || []).filter(function (log) { return log.completed; });
+        if (!setLines.length && (item.actualSetsCompleted || 0) > 0) {
+          setLines = ensured.setLogs || [];
+        }
+        html +=
+          '<div class="history-exercise" data-history-ex="' + globalIndex + '">' +
+            placeholderImageHtml('card-image') +
+            '<div class="name">' + escapeHtml(snap.name || 'Bài tập') + '</div>' +
+            '<div class="meta">Planned: ' + (item.plannedSets || snap.sets || 0) + ' × ' + (item.plannedReps || snap.reps || 0) + '</div>' +
+            '<div class="meta">Actual sets: ' + (item.actualSetsCompleted || 0) + '</div>' +
+            setLines.map(function (log) {
+              return '<div class="set-log-line">' + escapeHtml(D.formatSetLogLine(log)) + '</div>';
+            }).join('') +
+            '<span class="status-pill ' + escapeHtml(status) + '">' + escapeHtml(D.completionStatusLabel(status)) + '</span>' +
+          '</div>';
+      });
+    }
+
+    var scheduled = (entry.exercises || []).filter(function (item) { return item.role !== 'supplemental'; });
+    var supplemental = (entry.exercises || []).filter(function (item) { return item.role === 'supplemental'; });
+    if (entry.sessionKind === 'library' && !supplemental.length) {
+      renderHistoryItems(scheduled, 'Bài đã tập');
+    } else {
+      renderHistoryItems(scheduled, 'Bài theo lịch');
+      renderHistoryItems(supplemental, 'Bài bổ sung');
+    }
     html += '</div>';
     els.historyDetailContent.innerHTML = html;
     showOverlay(els.historyDetailOverlay);
@@ -267,7 +337,6 @@
       });
     });
   }
-
   function closeHistoryDetail() {
     hideOverlay(els.historyDetailOverlay);
   }
@@ -298,6 +367,7 @@
     renderWeek();
     renderTabs();
     renderHistory();
+    if (els.libraryScreen && !els.libraryScreen.hidden) renderLibrary();
   }
 
   function selectWorkout(workoutId) {
@@ -309,8 +379,10 @@
 
   function openDetail(index) {
     selectedExerciseIndex = index;
-    var exercise = getWorkout(currentWorkoutId).exercises[index];
-    els.dprog.textContent = 'Bài ' + (index + 1) + '/' + getWorkout(currentWorkoutId).exercises.length;
+    var exercises = getDisplayedExercises();
+    var exercise = exercises[index];
+    if (!exercise) return;
+    els.dprog.textContent = 'Bài ' + (index + 1) + '/' + exercises.length;
     els.dname.textContent = exercise.name;
     els.dmeta.textContent = D.formatExerciseMeta(exercise);
     els.dnote.textContent = exercise.notes || '';
@@ -324,7 +396,9 @@
   }
 
   function getFormMode(form) {
-    return form === els.editForm ? 'edit' : 'replace';
+    if (form === els.editForm) return 'edit';
+    if (form === els.addExerciseForm) return 'add';
+    return 'replace';
   }
 
   function getFormPreview(form) {
@@ -469,9 +543,18 @@
     });
   }
 
+  function findWorkoutExerciseIndexByDisplayed(index) {
+    var displayed = getDisplayedExercises()[index];
+    var workout = getWorkout(currentWorkoutId);
+    if (!displayed || !workout) return -1;
+    return workout.exercises.findIndex(function (ex) { return ex.id === displayed.id; });
+  }
+
   function openEdit(index) {
     selectedExerciseIndex = index;
-    fillExerciseForm(els.editForm, getWorkout(currentWorkoutId).exercises[index]);
+    var exercise = getDisplayedExercises()[index];
+    if (!exercise) return;
+    fillExerciseForm(els.editForm, exercise);
     showOverlay(els.editOverlay);
   }
 
@@ -482,9 +565,12 @@
   function saveEdit(event) {
     event.preventDefault();
     var workout = getWorkout(currentWorkoutId);
-    var current = workout.exercises[selectedExerciseIndex];
-    readExerciseForm(els.editForm, current.id, currentWorkoutId).then(function (exercise) {
-      workout.exercises[selectedExerciseIndex] = exercise;
+    var displayed = getDisplayedExercises()[selectedExerciseIndex];
+    if (!workout || !displayed) return;
+    var realIndex = findWorkoutExerciseIndexByDisplayed(selectedExerciseIndex);
+    if (realIndex < 0) return;
+    readExerciseForm(els.editForm, displayed.id, currentWorkoutId).then(function (exercise) {
+      workout.exercises[realIndex] = exercise;
       persistWorkouts();
       closeEdit();
       renderAll();
@@ -511,8 +597,10 @@
   function saveReplace(event) {
     event.preventDefault();
     var workout = getWorkout(currentWorkoutId);
+    var realIndex = findWorkoutExerciseIndexByDisplayed(selectedExerciseIndex);
+    if (!workout || realIndex < 0) return;
     readExerciseForm(els.replaceForm, null, currentWorkoutId).then(function (replacement) {
-      workout.exercises[selectedExerciseIndex] = replacement;
+      workout.exercises[realIndex] = replacement;
       persistWorkouts();
       closeReplace();
       renderAll();
@@ -520,7 +608,6 @@
       console.error('Failed to replace exercise image', err);
     });
   }
-
   function applyWelcomeBackground() {
     if (!els.welcomeBg) return;
     var src = D.WELCOME_BACKGROUND_IMAGE || 'assets/welcome-background.jpg';
@@ -538,12 +625,6 @@
     if (els.appHome) els.appHome.hidden = false;
     if (els.libraryScreen) els.libraryScreen.hidden = true;
     renderAll();
-  }
-
-  function showLibrary() {
-    if (els.welcomeScreen) els.welcomeScreen.hidden = true;
-    if (els.appHome) els.appHome.hidden = true;
-    if (els.libraryScreen) els.libraryScreen.hidden = false;
   }
 
   function selectTodayWorkout() {
@@ -579,6 +660,181 @@
 
   function welcomeOpenLibrary() {
     showLibrary();
+  }
+
+  function renderLibrary() {
+    if (!els.libraryList) return;
+    var exercises = (library && library.exercises) || [];
+    if (!exercises.length) {
+      els.libraryList.innerHTML = '<div class="card"><div class="name">Chưa có bài trong thư viện</div><div class="note">Bấm “+ Thêm bài tập” để tạo bài lẻ.</div></div>';
+      return;
+    }
+    els.libraryList.innerHTML = exercises.map(function (exercise, index) {
+      return (
+        '<div class="card" data-library-index="' + index + '">' +
+          '<div class="card-top">' +
+            placeholderImageHtml('card-image') +
+            '<div class="card-body">' +
+              '<div class="name">' + escapeHtml(exercise.name) + '</div>' +
+              '<div class="meta">' + escapeHtml(D.formatExerciseMeta(exercise)) + '</div>' +
+              (exercise.instructions ? '<div class="note">' + escapeHtml(exercise.instructions) + '</div>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="library-actions">' +
+            '<button type="button" data-library-action="train" data-index="' + index + '">Tập bài này</button>' +
+            '<button type="button" data-library-action="add-schedule" data-index="' + index + '">Thêm vào lịch tập</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+    var cards = els.libraryList.querySelectorAll('.card');
+    exercises.forEach(function (exercise, index) {
+      var slot = cards[index] && cards[index].querySelector('[data-image-slot]');
+      if (!slot) return;
+      Img.resolveImageSrc(exercise).then(function (src) {
+        if (!src || !slot.parentNode) return;
+        var img = document.createElement('img');
+        img.className = 'card-image';
+        img.alt = '';
+        img.src = src;
+        slot.replaceWith(img);
+      });
+    });
+  }
+
+  function showLibrary() {
+    if (els.welcomeScreen) els.welcomeScreen.hidden = true;
+    if (els.appHome) els.appHome.hidden = true;
+    if (els.libraryScreen) els.libraryScreen.hidden = false;
+    renderLibrary();
+  }
+
+  function openAddExerciseForm() {
+    if (!els.addExerciseForm) return;
+    els.addExerciseForm.reset();
+    resetFormImageState('add');
+    els.addExerciseForm.elements.sets.value = 3;
+    els.addExerciseForm.elements.reps.value = 12;
+    els.addExerciseForm.elements.resistance.value = 0;
+    els.addExerciseForm.elements.resistanceType.value = 'kg';
+    showFormPreview(els.addExerciseForm, '');
+    showOverlay(els.addExerciseOverlay);
+  }
+
+  function closeAddExerciseForm() {
+    hideOverlay(els.addExerciseOverlay);
+  }
+
+  function saveAddExercise(event) {
+    event.preventDefault();
+    readExerciseForm(els.addExerciseForm, null, 'lib').then(function (exercise) {
+      if (!library.exercises) library.exercises = [];
+      library.exercises.push(exercise);
+      persistLibrary();
+      closeAddExerciseForm();
+      renderLibrary();
+    }).catch(function (err) {
+      console.error('Failed to add library exercise', err);
+    });
+  }
+
+  function startLibraryExercise(index) {
+    var exercise = library.exercises[index];
+    if (!exercise) return;
+    if (activeSession && activeSession.phase !== 'complete' && !resumePromptShown) {
+      // If a schedule session is in progress, prefer adding as supplemental.
+      addExerciseToActiveSession(exercise);
+      return;
+    }
+    resumePromptShown = true;
+    activeSession = D.createWorkoutSession(
+      { id: 'library', title: 'Tập theo bài · ' + exercise.name, exercises: [exercise] },
+      { sessionKind: 'library', workoutName: 'Tập theo bài · ' + exercise.name }
+    );
+    persistSession();
+    showWorkoutView();
+  }
+
+  function openAddToSchedulePicker(index) {
+    selectedLibraryIndex = index;
+    showOverlay(els.addToScheduleOverlay);
+  }
+
+  function closeAddToSchedulePicker() {
+    hideOverlay(els.addToScheduleOverlay);
+  }
+
+  function addLibraryExerciseToSchedule(workoutId) {
+    var exercise = library.exercises[selectedLibraryIndex];
+    var workout = getWorkout(workoutId);
+    if (!exercise || !workout) return;
+    var copy = D.clone(exercise);
+    copy.id = D.makeExerciseId(workoutId, exercise.name + '-' + Date.now());
+    workout.exercises.push(copy);
+    persistWorkouts();
+    closeAddToSchedulePicker();
+    currentWorkoutId = workoutId;
+    showHome();
+  }
+
+  function openPickExerciseForSession() {
+    pickMode = 'session';
+    if (els.pickExerciseTitle) els.pickExerciseTitle.textContent = 'Thêm bài vào buổi đang tập';
+    if (els.pickExerciseIntro) els.pickExerciseIntro.textContent = 'Bài được chọn sẽ là BÀI BỔ SUNG trong cùng active session / History.';
+    renderPickExerciseList();
+    showOverlay(els.pickExerciseOverlay);
+  }
+
+  function closePickExercise() {
+    hideOverlay(els.pickExerciseOverlay);
+    pickMode = '';
+  }
+
+  function renderPickExerciseList() {
+    if (!els.pickExerciseList) return;
+    var exercises = (library && library.exercises) || [];
+    if (!exercises.length) {
+      els.pickExerciseList.innerHTML = '<div class="pick-empty">Thư viện trống. Hãy thêm bài ở “Tập theo bài”.</div>';
+      return;
+    }
+    els.pickExerciseList.innerHTML = exercises.map(function (exercise, index) {
+      return (
+        '<div class="card">' +
+          '<div class="name">' + escapeHtml(exercise.name) + '</div>' +
+          '<div class="meta">' + escapeHtml(D.formatExerciseMeta(exercise)) + '</div>' +
+          '<button type="button" class="btn" data-pick-index="' + index + '">Thêm bài này</button>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function addExerciseToActiveSession(exercise) {
+    if (!activeSession || activeSession.phase === 'complete') {
+      // Start a schedule session if missing, then append.
+      var workout = getWorkout(currentWorkoutId);
+      if (!workout) return;
+      resumePromptShown = true;
+      activeSession = D.createWorkoutSession(workout);
+    }
+    var item = D.createSessionExercise(exercise, 'supplemental');
+    activeSession.exercises.push(item);
+    activeSession.estimatedDuration = D.estimateWorkoutSeconds({
+      exercises: activeSession.exercises.map(function (ex) { return ex.snapshot; })
+    });
+    persistSession();
+    closePickExercise();
+    if (els.workoutOverlay && els.workoutOverlay.style.display === 'flex') {
+      // stay on current exercise
+      showWorkoutView();
+    } else {
+      // jump to the newly added exercise
+      activeSession.currentExerciseIndex = activeSession.exercises.length - 1;
+      activeSession.currentSet = 1;
+      activeSession.phase = 'exercise';
+      persistSession();
+      showWorkoutView();
+    }
+    renderAll();
   }
 
   function clearRestTimer() {
@@ -671,16 +927,47 @@
     return false;
   }
 
+  function readCurrentSetResistanceFromUi() {
+    if (!els.wSetResistance) return null;
+    return {
+      resistance: Math.max(0, parseFloat(els.wSetResistance.value) || 0),
+      resistanceType: (els.wSetResistanceType && els.wSetResistanceType.value) || 'kg'
+    };
+  }
+
+  function writeCurrentSetResistanceToUi(log) {
+    if (!els.wSetResistance || !log) return;
+    els.wSetResistance.value = log.resistance != null ? log.resistance : 0;
+    if (els.wSetResistanceType) els.wSetResistanceType.value = log.resistanceType || 'kg';
+  }
+
+  function syncUiResistanceIntoSession() {
+    var current = getCurrentExercise();
+    if (!current || !activeSession) return;
+    D.ensureSetLogs(current);
+    var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
+    if (!current.setLogs[setIndex]) return;
+    var values = readCurrentSetResistanceFromUi();
+    if (!values) return;
+    current.setLogs[setIndex].resistance = values.resistance;
+    current.setLogs[setIndex].resistanceType = values.resistanceType;
+  }
+
   function showWorkoutView() {
     var current = getCurrentExercise();
     if (!current) return;
+    D.ensureSetLogs(current);
     var snap = current.snapshot;
-    els.wprog.textContent = 'Bài ' + (activeSession.currentExerciseIndex + 1) + '/' + activeSession.exercises.length;
+    var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
+    var log = current.setLogs[setIndex] || current.setLogs[0];
+    els.wprog.textContent = 'Bài ' + (activeSession.currentExerciseIndex + 1) + '/' + activeSession.exercises.length +
+      (current.role === 'supplemental' ? ' · Bổ sung' : '');
     els.wname.textContent = snap.name;
     els.wmeta.textContent = D.formatExerciseMeta(snap);
     els.wset.textContent = [snap.instructions, snap.notes].filter(Boolean).join('\n\n');
     els.wsetDisplay.textContent = 'SET ' + activeSession.currentSet + ' / ' + snap.sets;
     els.wrepsDisplay.textContent = snap.reps + ' REPS';
+    writeCurrentSetResistanceToUi(log);
     applyImageToElement(els.wimage, snap);
     hideOverlay(els.restOverlay);
     hideOverlay(els.completionOverlay);
@@ -708,19 +995,32 @@
   function completeSet() {
     var current = getCurrentExercise();
     if (!current || !activeSession) return;
+    D.ensureSetLogs(current);
+    syncUiResistanceIntoSession();
+    var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
+    var log = current.setLogs[setIndex];
+    if (log) {
+      log.completed = true;
+      log.reps = current.snapshot.reps;
+      current.actualResistance = log.resistance;
+    }
     current.actualSetsCompleted += 1;
     current.actualReps = current.snapshot.reps;
-    current.actualResistance = current.snapshot.resistance;
     current.completionStatus = 'in-progress';
     var plannedSets = current.snapshot.sets;
     if (activeSession.currentSet < plannedSets) {
+      // Prefill next set with this set's resistance (UX), without changing exercise default.
+      var next = current.setLogs[setIndex + 1];
+      if (next && log) {
+        next.resistance = log.resistance;
+        next.resistanceType = log.resistanceType;
+      }
       persistSession();
       beginRest('set', D.REST_SET_SECONDS);
       return;
     }
     completeExercise(false);
   }
-
   function completeExercise(skipSetRest) {
     var current = getCurrentExercise();
     if (!current || !activeSession) return;
@@ -824,9 +1124,16 @@
     });
 
     var jumpHistoryBtn = document.getElementById('jump-history-btn');
-    if (jumpHistoryBtn) {
-      jumpHistoryBtn.addEventListener('click', jumpToHistory);
-    }
+    if (jumpHistoryBtn) jumpHistoryBtn.addEventListener('click', jumpToHistory);
+
+    var homeBackBtn = document.getElementById('home-back-btn');
+    if (homeBackBtn) homeBackBtn.addEventListener('click', showWelcome);
+
+    var saveOrderBtn = document.getElementById('save-order-default-btn');
+    if (saveOrderBtn) saveOrderBtn.addEventListener('click', saveDisplayedOrderAsDefault);
+
+    var addToSessionBtn = document.getElementById('add-to-session-btn');
+    if (addToSessionBtn) addToSessionBtn.addEventListener('click', openPickExerciseForSession);
 
     els.list.addEventListener('click', function (event) {
       var target = event.target.closest('[data-action]');
@@ -835,6 +1142,8 @@
       if (target.dataset.action === 'detail') openDetail(index);
       if (target.dataset.action === 'edit') openEdit(index);
       if (target.dataset.action === 'replace') openReplace(index);
+      if (target.dataset.action === 'move-up') moveDisplayedExercise(index, -1);
+      if (target.dataset.action === 'move-down') moveDisplayedExercise(index, 1);
     });
 
     els.historyList.addEventListener('click', function (event) {
@@ -859,11 +1168,65 @@
     els.replaceForm.addEventListener('submit', saveReplace);
     bindImagePicker(els.editForm);
     bindImagePicker(els.replaceForm);
+
+    if (els.addExerciseForm) {
+      document.getElementById('add-exercise-close-btn').addEventListener('click', closeAddExerciseForm);
+      els.addExerciseForm.addEventListener('submit', saveAddExercise);
+      bindImagePicker(els.addExerciseForm);
+    }
+    var libraryAddBtn = document.getElementById('library-add-btn');
+    if (libraryAddBtn) libraryAddBtn.addEventListener('click', openAddExerciseForm);
+
+    if (els.libraryList) {
+      els.libraryList.addEventListener('click', function (event) {
+        var btn = event.target.closest('[data-library-action]');
+        if (!btn) return;
+        var index = parseInt(btn.dataset.index, 10);
+        if (btn.dataset.libraryAction === 'train') startLibraryExercise(index);
+        if (btn.dataset.libraryAction === 'add-schedule') openAddToSchedulePicker(index);
+      });
+    }
+
+    if (els.pickExerciseList) {
+      document.getElementById('pick-exercise-close-btn').addEventListener('click', closePickExercise);
+      els.pickExerciseList.addEventListener('click', function (event) {
+        var btn = event.target.closest('[data-pick-index]');
+        if (!btn) return;
+        var exercise = library.exercises[parseInt(btn.dataset.pickIndex, 10)];
+        if (!exercise) return;
+        if (pickMode === 'session') addExerciseToActiveSession(exercise);
+      });
+    }
+
+    if (els.addToScheduleOverlay) {
+      document.getElementById('add-to-schedule-close-btn').addEventListener('click', closeAddToSchedulePicker);
+      els.addToScheduleOverlay.addEventListener('click', function (event) {
+        var btn = event.target.closest('[data-add-schedule]');
+        if (!btn) return;
+        addLibraryExerciseToSchedule(btn.dataset.addSchedule);
+      });
+    }
+
+    if (els.wSetResistance) {
+      els.wSetResistance.addEventListener('change', function () {
+        syncUiResistanceIntoSession();
+        persistSession();
+      });
+    }
+    if (els.wSetResistanceType) {
+      els.wSetResistanceType.addEventListener('change', function () {
+        syncUiResistanceIntoSession();
+        persistSession();
+      });
+    }
+
     document.getElementById('complete-set-btn').addEventListener('click', completeSet);
     document.getElementById('complete-exercise-btn').addEventListener('click', function () {
       completeExercise(true);
     });
     document.getElementById('workout-close-btn').addEventListener('click', closeWorkout);
+    var workoutAddBtn = document.getElementById('workout-add-exercise-btn');
+    if (workoutAddBtn) workoutAddBtn.addEventListener('click', openPickExerciseForSession);
     document.getElementById('rest-skip-btn').addEventListener('click', skipRest);
     document.getElementById('rest-add-btn').addEventListener('click', addRestSeconds);
     document.getElementById('completion-home-btn').addEventListener('click', closeCompletion);
@@ -917,7 +1280,6 @@
     renderAll();
     showWelcome();
     if (activeSession && activeSession.phase !== 'complete') {
-      // Keep resume data ready; banner shows when user enters home/schedule.
       resumePromptShown = false;
     }
     registerServiceWorker();
@@ -925,6 +1287,7 @@
 
   window.MyFitApp = {
     getWorkouts: function () { return workouts; },
+    getLibrary: function () { return library; },
     getActiveSession: function () { return activeSession; },
     setActiveSession: function (session) { activeSession = session; persistSession(); },
     selectWorkout: selectWorkout,
@@ -949,7 +1312,11 @@
     showLibrary: showLibrary,
     welcomeStartNow: welcomeStartNow,
     welcomeOpenSchedule: welcomeOpenSchedule,
-    welcomeOpenLibrary: welcomeOpenLibrary
+    welcomeOpenLibrary: welcomeOpenLibrary,
+    moveDisplayedExercise: moveDisplayedExercise,
+    saveDisplayedOrderAsDefault: saveDisplayedOrderAsDefault,
+    addExerciseToActiveSession: addExerciseToActiveSession,
+    startLibraryExercise: startLibraryExercise
   };
 
   init();

@@ -5,7 +5,9 @@
     workouts: 'myfit-workouts-v2',
     history: 'myfit-history-v2',
     activeSession: 'myfit-active-session-v2',
-    lastDay: 'myfit-last-day-v2'
+    lastDay: 'myfit-last-day-v2',
+    library: 'myfit-library-v1',
+    dayOrder: 'myfit-day-order-v1'
   };
 
   var REST_SET_SECONDS = 60;
@@ -82,7 +84,12 @@
     'c-step-up': 'assets/exercises/step-up.jpg',
     'c-banded-abduction': 'assets/exercises/banded-abduction.jpg',
     'c-single-leg-glute-bridge': 'assets/exercises/single-leg-glute-bridge.jpg',
-    'c-frog-pump': 'assets/exercises/frog-pump.jpg'
+    'c-frog-pump': 'assets/exercises/frog-pump.jpg',
+    'lib-cable-kickback': 'assets/exercises/cable-kickback.jpg',
+    'lib-banded-abduction': 'assets/exercises/banded-abduction.jpg',
+    'lib-lateral-raise': 'assets/exercises/lateral-raise.jpg',
+    'lib-face-pull': 'assets/exercises/face-pull.jpg',
+    'lib-calf-raise': 'assets/exercises/calf-raise.jpg'
   };
 
   var EXERCISE_IMAGE_BY_NAME = {
@@ -102,7 +109,9 @@
     'step-up': 'assets/exercises/step-up.jpg',
     'banded abduction': 'assets/exercises/banded-abduction.jpg',
     'single-leg glute bridge': 'assets/exercises/single-leg-glute-bridge.jpg',
-    'frog pump': 'assets/exercises/frog-pump.jpg'
+    'frog pump': 'assets/exercises/frog-pump.jpg',
+    'face pull': 'assets/exercises/face-pull.jpg',
+    'calf raise': 'assets/exercises/calf-raise.jpg'
   };
 
   function isStableAssetPath(src) {
@@ -299,6 +308,13 @@
       return { workouts: workouts, changed: changed };
     }
     if (firstName === 'Bulgarian Split Squat') {
+      var hasLegCurl = exercises.some(function (ex) {
+        return /leg\s*curl/i.test(String(ex && ex.name || ''));
+      });
+      if (hasLegCurl) {
+        // Order may have been customized; do not re-insert Leg Curl.
+        return { workouts: workouts, changed: false };
+      }
       workouts.a.exercises = [createLegCurlActivation()].concat(exercises);
       return { workouts: workouts, changed: true };
     }
@@ -371,10 +387,6 @@
 
   function saveHistory(history) {
     writeJson(STORAGE_KEYS.history, history);
-  }
-
-  function loadActiveSession() {
-    return readJson(STORAGE_KEYS.activeSession, null);
   }
 
   function saveActiveSession(session) {
@@ -476,11 +488,64 @@
     };
   }
 
-  function createSessionExercise(exercise) {
+  function createSetLogs(exercise) {
+    var sets = Math.max(1, parseInt(exercise.sets, 10) || 1);
+    var logs = [];
+    var i;
+    for (i = 0; i < sets; i += 1) {
+      logs.push({
+        setNumber: i + 1,
+        resistance: exercise.resistance != null ? exercise.resistance : 0,
+        resistanceType: exercise.resistanceType || 'kg',
+        reps: exercise.reps != null ? exercise.reps : 1,
+        completed: false
+      });
+    }
+    return logs;
+  }
+
+  function ensureSetLogs(item) {
+    if (!item || typeof item !== 'object') return item;
+    if (Array.isArray(item.setLogs) && item.setLogs.length) return item;
+    var snap = item.snapshot || {};
+    var planned = Math.max(1, parseInt(item.plannedSets || snap.sets, 10) || 1);
+    var completed = Math.max(0, parseInt(item.actualSetsCompleted, 10) || 0);
+    var resistance = item.actualResistance != null ? item.actualResistance : (item.plannedResistance != null ? item.plannedResistance : snap.resistance);
+    var resistanceType = item.plannedResistanceType || snap.resistanceType || 'kg';
+    var reps = item.actualReps != null ? item.actualReps : (item.plannedReps != null ? item.plannedReps : snap.reps);
+    var logs = [];
+    var i;
+    for (i = 0; i < planned; i += 1) {
+      logs.push({
+        setNumber: i + 1,
+        resistance: resistance != null ? resistance : 0,
+        resistanceType: resistanceType,
+        reps: reps != null ? reps : 1,
+        completed: i < completed
+      });
+    }
+    item.setLogs = logs;
+    if (!item.role) item.role = 'scheduled';
+    return item;
+  }
+
+  function formatSetLogLine(log) {
+    if (!log) return '';
+    var label = 'SET ' + (log.setNumber || '?') + ' – ';
+    if (log.resistanceType === 'bodyweight') return label + 'Bodyweight';
+    if (log.resistanceType === 'band') {
+      return label + (log.resistance > 0 ? 'Band · ' + log.resistance : 'Band');
+    }
+    if (!log.resistance) return label + 'Nhẹ';
+    return label + log.resistance + ' kg';
+  }
+
+  function createSessionExercise(exercise, role) {
     var snap = snapshotExercise(exercise);
     return {
       exerciseId: snap.id,
       snapshot: snap,
+      role: role === 'supplemental' ? 'supplemental' : 'scheduled',
       plannedSets: snap.sets,
       plannedReps: snap.reps,
       plannedResistance: snap.resistance,
@@ -488,19 +553,90 @@
       actualSetsCompleted: 0,
       actualReps: snap.reps,
       actualResistance: snap.resistance,
+      setLogs: createSetLogs(snap),
       completionStatus: 'pending'
     };
   }
 
-  function createWorkoutSession(workout) {
+  function todayKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function dayOrderKey(workoutId, dateStr) {
+    return String(dateStr || todayKey()) + ':' + String(workoutId || '');
+  }
+
+  function loadDayOrderMap() {
+    var map = readJson(STORAGE_KEYS.dayOrder, {});
+    return map && typeof map === 'object' ? map : {};
+  }
+
+  function saveDayOrderMap(map) {
+    writeJson(STORAGE_KEYS.dayOrder, map || {});
+  }
+
+  function getDayOrder(workoutId, dateStr) {
+    var map = loadDayOrderMap();
+    var key = dayOrderKey(workoutId, dateStr);
+    return Array.isArray(map[key]) ? map[key].slice() : null;
+  }
+
+  function setDayOrder(workoutId, orderIds, dateStr) {
+    var map = loadDayOrderMap();
+    map[dayOrderKey(workoutId, dateStr)] = (orderIds || []).slice();
+    saveDayOrderMap(map);
+  }
+
+  function clearDayOrder(workoutId, dateStr) {
+    var map = loadDayOrderMap();
+    delete map[dayOrderKey(workoutId, dateStr)];
+    saveDayOrderMap(map);
+  }
+
+  function applyOrderToExercises(exercises, orderIds) {
+    if (!Array.isArray(exercises) || !Array.isArray(orderIds) || !orderIds.length) {
+      return exercises ? exercises.slice() : [];
+    }
+    var byId = {};
+    exercises.forEach(function (ex) {
+      if (ex && ex.id) byId[ex.id] = ex;
+    });
+    var ordered = [];
+    var seen = {};
+    orderIds.forEach(function (id) {
+      if (byId[id] && !seen[id]) {
+        ordered.push(byId[id]);
+        seen[id] = true;
+      }
+    });
+    exercises.forEach(function (ex) {
+      if (ex && ex.id && !seen[ex.id]) ordered.push(ex);
+    });
+    return ordered;
+  }
+
+  function getOrderedWorkoutExercises(workout, dateStr) {
+    if (!workout) return [];
+    var order = getDayOrder(workout.id, dateStr);
+    if (!order) return (workout.exercises || []).slice();
+    return applyOrderToExercises(workout.exercises || [], order);
+  }
+
+  function createWorkoutSession(workout, options) {
+    options = options || {};
+    var exercises = options.exercises
+      ? options.exercises.slice()
+      : getOrderedWorkoutExercises(workout, options.date || todayKey());
+    var role = options.defaultRole || 'scheduled';
     return {
       id: 'session-' + Date.now(),
       workoutId: workout.id,
-      workoutName: workout.title,
-      date: new Date().toISOString().slice(0, 10),
+      workoutName: options.workoutName || workout.title,
+      sessionKind: options.sessionKind || 'schedule',
+      date: options.date || todayKey(),
       startTime: new Date().toISOString(),
       endTime: null,
-      estimatedDuration: estimateWorkoutSeconds(workout),
+      estimatedDuration: estimateWorkoutSeconds({ exercises: exercises }),
       actualDuration: null,
       currentExerciseIndex: 0,
       currentSet: 1,
@@ -508,7 +644,9 @@
       restKind: null,
       restEndTime: null,
       restRemaining: 0,
-      exercises: workout.exercises.map(createSessionExercise)
+      exercises: exercises.map(function (exercise) {
+        return createSessionExercise(exercise, options.roleFor && options.roleFor(exercise) || role);
+      })
     };
   }
 
@@ -520,14 +658,119 @@
       date: session.date,
       workoutId: session.workoutId,
       workoutName: session.workoutName,
+      sessionKind: session.sessionKind || 'schedule',
       startTime: session.startTime,
       endTime: session.endTime,
       estimatedDuration: session.estimatedDuration,
       actualDuration: Math.max(0, Math.round((end - start) / 1000)),
-      exercises: session.exercises.map(function (item) {
-        return clone(item);
+      exercises: (session.exercises || []).map(function (item) {
+        return clone(ensureSetLogs(item));
       })
     };
+  }
+
+  function createLibraryExercise(name, extras) {
+    var exercise = {
+      id: makeExerciseId('lib', name),
+      name: name,
+      image: '',
+      imageId: '',
+      instructions: '',
+      notes: '',
+      sets: 3,
+      reps: 12,
+      resistance: 0,
+      resistanceType: 'kg'
+    };
+    if (extras && typeof extras === 'object') {
+      Object.keys(extras).forEach(function (key) {
+        exercise[key] = extras[key];
+      });
+    }
+    if (!exercise.image) exercise.image = catalogImageForExercise(exercise) || '';
+    return exercise;
+  }
+
+  var DEFAULT_LIBRARY = [
+    createLibraryExercise('Cable Kickback', {
+      image: 'assets/exercises/cable-kickback.jpg',
+      instructions: 'Khi thu chân về, co gối sâu; khi đá ra sau, đá hơi chéo để siết mông.',
+      sets: 3,
+      reps: 15,
+      resistanceType: 'band'
+    }),
+    createLibraryExercise('Banded Abduction', {
+      image: 'assets/exercises/banded-abduction.jpg',
+      instructions: 'Mở gối chậm, giữ căng dây.',
+      sets: 3,
+      reps: 20,
+      resistanceType: 'band'
+    }),
+    createLibraryExercise('Lateral Raise', {
+      image: 'assets/exercises/lateral-raise.jpg',
+      instructions: 'Nâng đến khoảng ngang vai, không vung tạ.',
+      sets: 3,
+      reps: 15,
+      resistance: 2,
+      resistanceType: 'kg'
+    }),
+    createLibraryExercise('Face Pull', {
+      image: 'assets/exercises/face-pull.jpg',
+      instructions: 'Kéo cáp về phía mặt, khuỷu tay cao, siết lưng trên.',
+      sets: 3,
+      reps: 12,
+      resistanceType: 'band'
+    }),
+    createLibraryExercise('Calf Raise', {
+      image: 'assets/exercises/calf-raise.jpg',
+      instructions: 'Nhón gót có kiểm soát, dừng nhẹ ở đỉnh rồi hạ chậm.',
+      sets: 3,
+      reps: 15,
+      resistanceType: 'bodyweight'
+    })
+  ];
+
+  function normalizeLibraryExercise(exercise) {
+    return normalizeExercise(exercise, 'lib');
+  }
+
+  function loadLibrary() {
+    var stored = readJson(STORAGE_KEYS.library, null);
+    if (!stored || !Array.isArray(stored.exercises)) {
+      var fresh = { exercises: clone(DEFAULT_LIBRARY) };
+      writeJson(STORAGE_KEYS.library, fresh);
+      return fresh;
+    }
+    stored.exercises = stored.exercises.map(normalizeLibraryExercise);
+    // Ensure seed catalog items exist by id without wiping user-added ones
+    var byId = {};
+    stored.exercises.forEach(function (ex) { byId[ex.id] = true; });
+    var changed = false;
+    DEFAULT_LIBRARY.forEach(function (seed) {
+      if (!byId[seed.id]) {
+        stored.exercises.push(clone(seed));
+        changed = true;
+      }
+    });
+    if (changed) writeJson(STORAGE_KEYS.library, stored);
+    return stored;
+  }
+
+  function saveLibrary(library) {
+    writeJson(STORAGE_KEYS.library, library);
+  }
+
+  function migrateActiveSessionShape(session) {
+    if (!session || !Array.isArray(session.exercises)) return session;
+    if (!session.sessionKind) session.sessionKind = session.workoutId === 'library' ? 'library' : 'schedule';
+    session.exercises = session.exercises.map(function (item) {
+      return ensureSetLogs(item);
+    });
+    return session;
+  }
+
+  function loadActiveSession() {
+    return migrateActiveSessionShape(readJson(STORAGE_KEYS.activeSession, null));
   }
 
   function getTodayWeekIndex() {
@@ -570,6 +813,19 @@
     createSessionExercise: createSessionExercise,
     createWorkoutSession: createWorkoutSession,
     finalizeHistoryEntry: finalizeHistoryEntry,
+    createSetLogs: createSetLogs,
+    ensureSetLogs: ensureSetLogs,
+    formatSetLogLine: formatSetLogLine,
+    DEFAULT_LIBRARY: DEFAULT_LIBRARY,
+    loadLibrary: loadLibrary,
+    saveLibrary: saveLibrary,
+    createLibraryExercise: createLibraryExercise,
+    getDayOrder: getDayOrder,
+    setDayOrder: setDayOrder,
+    clearDayOrder: clearDayOrder,
+    getOrderedWorkoutExercises: getOrderedWorkoutExercises,
+    applyOrderToExercises: applyOrderToExercises,
+    todayKey: todayKey,
     getTodayWeekIndex: getTodayWeekIndex,
     getTodayWorkoutId: getTodayWorkoutId,
     makeExerciseId: makeExerciseId,

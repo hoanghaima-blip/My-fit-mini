@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
-<meta name="myfit-version" content="12">
+<meta name="myfit-version" content="13">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=12">
-<link rel="icon" href="assets/icon-192.png?v=12">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=12">
+<link rel="stylesheet" href="styles.css?v=13">
+<link rel="icon" href="assets/icon-192.png?v=13">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=13">
 <title>My Fit Mini</title>
 <script>
 /* Force one-time PWA cache refresh when UI version changes.
    Preserves workout/history localStorage and IndexedDB image data. */
 (function () {
-  var EXPECTED = '12';
+  var EXPECTED = '13';
   var VERSION_KEY = 'myfit-ui-version';
-  var RELOAD_KEY = 'myfit-ui-reload-v12';
+  var RELOAD_KEY = 'myfit-ui-reload-v13';
   try {
     var current = localStorage.getItem(VERSION_KEY);
     if (current === EXPECTED) return;
@@ -54,7 +54,7 @@
   <div class="welcome-overlay"></div>
   <div class="welcome-content">
     <p class="welcome-kicker">Chào mừng bạn đến với</p>
-    <img class="welcome-logo" src="assets/logo-header.png?v=12" alt="My Fit Mini">
+    <img class="welcome-logo" src="assets/logo-header.png?v=13" alt="My Fit Mini">
     <p class="welcome-tagline">Thức dậy và trở thành phiên bản mà chính bạn yêu thích nhất !</p>
     <div class="welcome-actions">
       <button type="button" class="welcome-btn welcome-btn-primary" id="welcome-start-btn">Bắt đầu ngay</button>
@@ -66,8 +66,11 @@
 </section>
 
 <main class="wrap app-home" id="app-home" hidden>
+<div class="home-top">
+  <button type="button" class="home-back" id="home-back-btn" aria-label="Quay về trang chủ">← Trang chủ</button>
+</div>
 <div class="brand">
-  <img class="brand-logo" src="assets/logo-header.png?v=12" alt="My Fit Mini">
+  <img class="brand-logo" src="assets/logo-header.png?v=13" alt="My Fit Mini">
 </div>
 <h1 class="title">Lịch tập của bạn</h1>
 
@@ -97,6 +100,11 @@
 <div class="week" id="week-calendar"></div>
 
 <div class="section">Bài tập</div>
+<div class="list-toolbar">
+  <button type="button" class="btn-secondary list-toolbar-btn" id="add-to-session-btn">+ Thêm bài tập vào buổi đang tập</button>
+  <button type="button" class="btn-secondary list-toolbar-btn" id="save-order-default-btn">Lưu thứ tự làm mặc định</button>
+</div>
+<p class="list-hint">Dùng ↑ ↓ để đổi thứ tự cho hôm nay. “Lưu thứ tự làm mặc định” mới ghi vào buổi T2/T4/T6.</p>
 <div id="exercise-list"></div>
 
 <section id="history-section" class="history-section">
@@ -115,14 +123,12 @@
   <div class="wrap library-inner">
     <button type="button" class="library-back" id="library-back-btn">← Quay lại</button>
     <div class="brand">
-      <img class="brand-logo" src="assets/logo-header.png?v=12" alt="My Fit Mini">
+      <img class="brand-logo" src="assets/logo-header.png?v=13" alt="My Fit Mini">
     </div>
     <h1 class="title">Tập theo bài</h1>
     <p class="library-intro">Thư viện bài tập lẻ / bổ trợ. Đây không phải lịch tập cố định T2–T4–T6.</p>
-    <div class="card">
-      <div class="name">Sắp có bài bổ trợ</div>
-      <div class="note">Mỗi bài lẻ sau này sẽ có nút “Tập bài này” và “Thêm vào lịch tập”. Hiện tại khu vực này đang được chuẩn bị.</div>
-    </div>
+    <button type="button" class="start" id="library-add-btn">+ Thêm bài tập</button>
+    <div id="library-list"></div>
     <button type="button" class="btn-secondary" id="library-to-schedule-btn">Xem lịch tập cố định</button>
   </div>
 </section>
@@ -137,6 +143,60 @@
     <div id="dinstructions" class="note"></div>
     <div id="dnote" class="note"></div>
     <button type="button" class="btn" id="detail-start-btn">Tập bài này</button>
+  </div>
+</div>
+
+<div class="overlay" id="add-exercise-overlay">
+  <div class="modal">
+    <button type="button" class="closex" id="add-exercise-close-btn">×</button>
+    <h2>Thêm bài tập</h2>
+    <form id="add-exercise-form">
+      <div class="form-group"><label>Tên bài tập</label><input name="name" required></div>
+      <div class="form-group"><label>Hướng dẫn</label><textarea name="instructions" rows="5"></textarea></div>
+      <div class="form-group"><label>Chú ý</label><textarea name="notes" rows="4"></textarea></div>
+      <div class="form-group">
+        <label>Ảnh minh họa</label>
+        <div class="image-picker">
+          <img class="image-preview" data-role="preview" alt="" style="display:none">
+          <input name="imageFile" type="file" accept="image/*" class="file-input">
+          <button type="button" class="btn-secondary image-pick-btn" data-role="pick">Chọn ảnh từ thiết bị</button>
+          <input name="image" type="url" placeholder="Hoặc dán URL ảnh (tùy chọn)">
+          <button type="button" class="btn-secondary image-clear-btn" data-role="clear">Xóa ảnh</button>
+        </div>
+      </div>
+      <div class="form-group"><label>Số SET</label><input name="sets" type="number" min="1" value="3" required></div>
+      <div class="form-group"><label>Số REPS</label><input name="reps" type="number" min="1" value="12" required></div>
+      <div class="form-group"><label>Mức kháng lực mặc định</label><input name="resistance" type="number" min="0" step="0.5" value="0"></div>
+      <div class="form-group">
+        <label>Loại kháng lực</label>
+        <select name="resistanceType">
+          <option value="kg">kg</option>
+          <option value="band">band</option>
+          <option value="bodyweight">bodyweight</option>
+        </select>
+      </div>
+      <button type="submit" class="btn">Lưu vào thư viện</button>
+    </form>
+  </div>
+</div>
+
+<div class="overlay" id="pick-exercise-overlay">
+  <div class="modal">
+    <button type="button" class="closex" id="pick-exercise-close-btn">×</button>
+    <h2 id="pick-exercise-title">Chọn bài tập</h2>
+    <p class="library-intro" id="pick-exercise-intro">Chọn bài từ thư viện.</p>
+    <div id="pick-exercise-list"></div>
+  </div>
+</div>
+
+<div class="overlay" id="add-to-schedule-overlay">
+  <div class="modal">
+    <button type="button" class="closex" id="add-to-schedule-close-btn">×</button>
+    <h2>Thêm vào lịch tập</h2>
+    <p class="library-intro">Chọn buổi T2 / T4 / T6 để thêm bài vào giáo án cố định.</p>
+    <button type="button" class="btn" data-add-schedule="a">Thêm vào T2 · Glutes A</button>
+    <button type="button" class="btn-secondary" data-add-schedule="b">Thêm vào T4 · Upper Body</button>
+    <button type="button" class="btn-secondary" data-add-schedule="c">Thêm vào T6 · Glutes B</button>
   </div>
 </div>
 
@@ -224,9 +284,22 @@
     <div id="wmeta" class="meta"></div>
     <div id="wset-display" class="set-display"></div>
     <div id="wreps-display" class="reps-display"></div>
+    <div class="set-resistance-box">
+      <label for="w-set-resistance">Mức kháng lực SET này</label>
+      <div class="set-resistance-row">
+        <input id="w-set-resistance" type="number" min="0" step="0.5" inputmode="decimal">
+        <select id="w-set-resistance-type">
+          <option value="kg">kg</option>
+          <option value="band">band</option>
+          <option value="bodyweight">bodyweight</option>
+        </select>
+      </div>
+      <p class="set-resistance-hint">Chỉ đổi SET hiện tại. Không đổi mức mặc định của bài.</p>
+    </div>
     <div id="wset" class="note"></div>
     <button type="button" class="complete" id="complete-set-btn">Hoàn thành SET</button>
     <button type="button" class="btn-secondary" id="complete-exercise-btn">Hoàn thành bài tập</button>
+    <button type="button" class="btn-secondary" id="workout-add-exercise-btn">+ Thêm bài tập vào buổi này</button>
   </div>
 </div>
 
@@ -249,8 +322,8 @@
   </div>
 </div>
 
-<script src="data.js?v=12"></script>
-<script src="images.js?v=12"></script>
-<script src="app.js?v=12"></script>
+<script src="data.js?v=13"></script>
+<script src="images.js?v=13"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

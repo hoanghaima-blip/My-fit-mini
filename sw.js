@@ -1,14 +1,14 @@
-const CACHE_NAME = 'my-fit-mini-v12';
-const APP_VERSION = '12';
+const CACHE_NAME = 'my-fit-mini-v13';
+const APP_VERSION = '13';
 
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './styles.css?v=12',
-  './data.js?v=12',
-  './images.js?v=12',
-  './app.js?v=12',
+  './styles.css?v=13',
+  './data.js?v=13',
+  './images.js?v=13',
+  './app.js?v=13',
   './styles.css',
   './data.js',
   './images.js',
@@ -36,6 +36,8 @@ const ASSETS = [
   './assets/exercises/single-leg-glute-bridge.jpg',
   './assets/exercises/step-up.jpg',
   './assets/exercises/sumo-squat.jpg',
+  './assets/exercises/face-pull.jpg',
+  './assets/exercises/calf-raise.jpg',
 ];
 
 self.addEventListener('install', event => {

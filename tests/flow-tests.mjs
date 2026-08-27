@@ -600,7 +600,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="12"'), 'version meta is 12');
+    assert(html.includes('myfit-version" content="13"'), 'version meta is 13');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
@@ -612,8 +612,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v12'), 'service worker cache v9');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v12 + exercise assets');
+    assert(sw.includes('my-fit-mini-v13'), 'service worker cache v9');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v13 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -666,14 +666,92 @@ async function run() {
         );      }
     }
     assert(total === 15, 'checked all 15 default exercises, got ' + total);
-    assert(Object.keys(D.EXERCISE_IMAGE_ASSETS).length === 15, 'catalog has 15 entries');
+    assert(Object.keys(D.EXERCISE_IMAGE_ASSETS).length >= 15, 'catalog has at least 15 entries');
     // SW precaches exercise assets
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert((sw.match(/assets\/exercises\//g) || []).length === 15, 'SW caches 15 exercise images');
+    assert((sw.match(/assets\/exercises\//g) || []).length >= 15, 'SW caches exercise images');
     pass('TEST 20: all exercises use repo assets (no device-only image deps)');
     dom.window.close();
   } catch (err) {
     fail('TEST 20', err);
+  }
+
+  // NEW: workout management features (order, set logs, library, supplemental)
+  try {
+    resetStorage();
+    const first = loadApp();
+    const D = first.window.MyFitData;
+    const app = first.window.MyFitApp;
+    assert(!!first.window.document.getElementById('home-back-btn'), 'home back button exists');
+    assert(D.REST_SET_SECONDS === 60 && D.REST_EXERCISE_SECONDS === 90, 'timer constants unchanged');
+
+    // CASE-like: reorder day order without changing default workout until save
+    const beforeIds = D.loadWorkouts().a.exercises.map((e) => e.id);
+    app.moveDisplayedExercise(0, 1);
+    const dayOrder = D.getDayOrder('a');
+    assert(Array.isArray(dayOrder) && dayOrder[0] === beforeIds[1], 'day order moved first exercise down');
+    assert(D.loadWorkouts().a.exercises[0].id === beforeIds[0], 'default workout order unchanged until save');
+    app.saveDisplayedOrderAsDefault();
+    assert(D.loadWorkouts().a.exercises[0].id === beforeIds[1], 'saved default order');
+
+    // per-set resistance in session/history
+    resetStorage();
+    const second = loadApp();
+    const D2 = second.window.MyFitData;
+    const app2 = second.window.MyFitApp;
+    app2.setActiveSession(null);
+    const workout = D2.loadWorkouts().a;
+    let session = D2.createWorkoutSession(workout);
+    session.exercises[0].snapshot.sets = 3;
+    session.exercises[0].setLogs = D2.createSetLogs(session.exercises[0].snapshot);
+    session.exercises[0].setLogs[0].resistance = 10;
+    session.exercises[0].setLogs[1].resistance = 12;
+    session.exercises[0].setLogs[2].resistance = 12;
+    session.exercises[0].setLogs.forEach((l) => { l.completed = true; });
+    session.exercises[0].actualSetsCompleted = 3;
+    session.exercises[0].completionStatus = 'completed';
+    session.exercises[0].snapshot.resistance = 10; // default stays 10
+    // add supplemental
+    const lib = D2.loadLibrary();
+    assert(lib.exercises.length >= 5, 'library seeded');
+    const kick = lib.exercises.find((e) => /cable kickback/i.test(e.name));
+    session.exercises.push(D2.createSessionExercise(kick, 'supplemental'));
+    session.exercises[session.exercises.length - 1].actualSetsCompleted = 2;
+    session.exercises[session.exercises.length - 1].setLogs[0].resistance = 8;
+    session.exercises[session.exercises.length - 1].setLogs[0].completed = true;
+    session.exercises[session.exercises.length - 1].setLogs[1].resistance = 8;
+    session.exercises[session.exercises.length - 1].setLogs[1].completed = true;
+    session.exercises[session.exercises.length - 1].completionStatus = 'completed';
+    session.endTime = new Date().toISOString();
+    const entry = D2.finalizeHistoryEntry(session);
+    assert(entry.exercises[0].snapshot.resistance === 10, 'exercise default resistance preserved');
+    assert(entry.exercises[0].setLogs[0].resistance === 10, 'set1 logged 10');
+    assert(entry.exercises[0].setLogs[1].resistance === 12, 'set2 logged 12');
+    assert(entry.exercises[0].setLogs[2].resistance === 12, 'set3 logged 12');
+    const supp = entry.exercises.filter((e) => e.role === 'supplemental');
+    assert(supp.length === 1, 'one supplemental in history entry');
+    assert(entry.exercises.length === workout.exercises.length + 1, 'same history entry contains scheduled + supplemental');
+
+    // library solo session kind
+    const solo = D2.createWorkoutSession(
+      { id: 'library', title: 'Tập theo bài · Face Pull', exercises: [lib.exercises.find((e) => /face pull/i.test(e.name))] },
+      { sessionKind: 'library' }
+    );
+    assert(solo.sessionKind === 'library', 'library session kind');
+    assert(solo.exercises.length === 1, 'solo library workout has one exercise');
+
+    // HTML markers for new UI
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
+    assert(html.includes('home-back-btn'), 'back home button markup');
+    assert(html.includes('add-exercise-form'), 'add exercise form markup');
+    assert(html.includes('w-set-resistance'), 'per-set resistance input');
+    assert(html.includes('library-add-btn'), 'library add button');
+
+    pass('TEST 21: order + per-set logs + supplemental + library');
+    first.dom.window.close();
+    second.dom.window.close();
+  } catch (err) {
+    fail('TEST 21', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

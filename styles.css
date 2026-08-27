@@ -35,5 +35,22 @@
 .app-home[hidden],.library-screen[hidden]{display:none !important}
 .library-screen{min-height:100vh;min-height:100dvh;background:#f7f5f1}
 .library-inner{padding-top:calc(18px + env(safe-area-inset-top,0px));padding-bottom:calc(40px + env(safe-area-inset-bottom,0px))}
-.library-back{border:0;background:transparent;color:#222;font-size:16px;font-weight:700;padding:8px 0 14px;cursor:pointer}
+.library-back{border:0;background:transparent;color:#222;font-size:16px;font-weight:700;padding:8px 0 14px;cursor:pointer;min-height:44px}
 .library-intro{color:#666;font-size:15px;line-height:1.45;margin:-8px 0 18px}
+.home-top{padding-top:env(safe-area-inset-top,0px);margin:0 0 8px}
+.home-back{border:0;background:transparent;color:#222;font-size:16px;font-weight:700;padding:10px 0;min-height:44px;cursor:pointer}
+.list-toolbar{display:grid;gap:10px;margin:0 0 8px}
+.list-toolbar-btn{margin-top:0}
+.list-hint{color:#777;font-size:13px;line-height:1.4;margin:0 0 10px}
+.order-btns{display:flex;flex-direction:column;gap:6px;margin-left:4px}
+.order-btns button{border:0;background:#f0eee9;border-radius:10px;width:40px;height:40px;font-size:16px;font-weight:800;cursor:pointer}
+.set-resistance-box{background:#fff;border-radius:16px;padding:14px;margin:8px 0 14px;box-shadow:0 2px 10px #0001}
+.set-resistance-box label{display:block;font-size:14px;color:#777;font-weight:700;margin-bottom:8px}
+.set-resistance-row{display:flex;gap:10px}
+.set-resistance-row input,.set-resistance-row select{flex:1;border:1px solid #ddd;border-radius:12px;padding:12px;font-size:16px;background:#fff}
+.set-resistance-hint{margin:8px 0 0;font-size:12px;color:#888;line-height:1.35}
+.history-group-title{font-size:16px;font-weight:800;margin:18px 0 8px;color:#222}
+.set-log-line{font-size:14px;color:#444;margin-top:4px}
+.library-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.library-actions button{border:0;background:#f0eee9;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:700;cursor:pointer;min-height:44px}
+.pick-empty{color:#777;padding:12px 0}

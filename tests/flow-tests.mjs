@@ -909,6 +909,109 @@ async function run() {
     fail('TEST 23', err);
   }
 
+  try {
+    const { window, dom } = loadApp();
+    resetStorage();
+    const D = window.MyFitData;
+    const app = window.MyFitApp;
+    const doc = window.document;
+    app.selectWorkout('b');
+
+    const workouts = app.getWorkouts();
+    const lat = workouts.b.exercises[0];
+    assert(D.isStableAssetPath(lat.image), 'T4 lat pulldown uses stable asset path');
+
+    app.openEdit(0);
+    const editForm = doc.getElementById('edit-form');
+    const imageInput = editForm.elements.image;
+    assert(imageInput.type === 'text', 'image field is not required URL input');
+    assert(editForm.checkValidity(), 'edit form valid with stable asset path hidden from URL field');
+    assert(!imageInput.value || imageInput.value.indexOf('assets/exercises/') !== 0, 'stable asset not shown as URL field value');
+
+    editForm.elements.name.value = 'Lat Pulldown Edited';
+    editForm.elements.reps.value = '11';
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(100);
+
+    const saved = app.getWorkouts().b.exercises[0];
+    assert(saved.name === 'Lat Pulldown Edited', 'T4 name saved without touching image');
+    assert(saved.reps === 11, 'T4 reps saved');
+    assert(String(saved.image).indexOf('lat-pulldown') >= 0, 'T4 image path preserved');
+
+    // exercise without image still saves
+    saved.image = '';
+    saved.imageId = '';
+    window.MyFitData.saveWorkouts(app.getWorkouts());
+    app.openEdit(0);
+    editForm.elements.instructions.value = 'No image ok';
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(100);
+    const noImg = app.getWorkouts().b.exercises[0];
+    assert(noImg.instructions === 'No image ok', 'T4 saves without image');
+
+    pass('TEST 24: T4 edit saves without changing image URL field');
+    dom.window.close();
+  } catch (err) {
+    fail('TEST 24', err);
+  }
+
+  try {
+    const first = loadApp();
+    resetStorage();
+    const D = first.window.MyFitData;
+    const workouts = D.loadWorkouts();
+    const library = D.loadLibrary(workouts);
+    const scheduleNames = [];
+    ['a', 'b', 'c'].forEach((wid) => {
+      workouts[wid].exercises.forEach((ex) => scheduleNames.push(ex.name));
+    });
+    assert(library.exercises.length === 17, 'library contains all schedule + extras');
+    scheduleNames.forEach((name) => {
+      assert(library.exercises.some((ex) => ex.name === name), 'library has schedule exercise: ' + name);
+    });
+    const keys = library.exercises.map((ex) => D.exerciseIdentityKey(ex));
+    assert(keys.length === new Set(keys).size, 'library has no duplicate identity keys');
+
+    // edit master propagates to schedule + library, not history
+    const beforeHist = [];
+    workouts.b.exercises[0].name = 'Master Lat Pulldown';
+    D.propagateExerciseMaster(workouts.b.exercises[0], workouts, library);
+    assert(workouts.b.exercises[0].name === 'Master Lat Pulldown', 'schedule updated');
+    const libLat = library.exercises.find((ex) => D.exerciseIdentityKey(ex) === D.exerciseIdentityKey(workouts.b.exercises[0]));
+    assert(libLat && libLat.name === 'Master Lat Pulldown', 'library updated');
+
+    first.dom.window.close();
+
+    // reload preserves synced library
+    const second = loadApp();
+    const lib2 = second.window.MyFitData.loadLibrary(second.window.MyFitApp.getWorkouts());
+    assert(lib2.exercises.length === 17, 'library persists after reload');
+    assert(lib2.exercises.some((ex) => /Master Lat Pulldown|Lat Pulldown/.test(ex.name)), 'master name persisted');
+
+    // supplemental library session history
+    resetStorage();
+    second.window.MyFitApp.setActiveSession(null);
+    const libFresh = second.window.MyFitData.loadLibrary(second.window.MyFitApp.getWorkouts());
+    const face = libFresh.exercises.find((ex) => /face pull/i.test(ex.name));
+    assert(face, 'library-only exercise exists');
+    const solo = second.window.MyFitData.createWorkoutSession(
+      { id: 'library', title: 'Tập theo bài · Face Pull', exercises: [face] },
+      { sessionKind: 'library' }
+    );
+    solo.exercises[0].setLogs[0].completed = true;
+    solo.exercises[0].actualSetsCompleted = 1;
+    solo.exercises[0].completionStatus = 'completed';
+    solo.endTime = new Date().toISOString();
+    const entry = second.window.MyFitData.finalizeHistoryEntry(solo);
+    assert(entry.sessionKind === 'library', 'library session kind in history');
+    assert(entry.exercises[0].role === 'scheduled', 'solo library exercise role in session item');
+
+    pass('TEST 25: schedule→library sync, dedupe, master propagate, reload');
+    second.dom.window.close();
+  } catch (err) {
+    fail('TEST 25', err);
+  }
+
   console.log('\nMy Fit Mini Test Results');
   console.log('========================');
   results.forEach((result) => {

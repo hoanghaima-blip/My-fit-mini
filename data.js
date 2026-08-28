@@ -38,6 +38,129 @@
     return workoutId + '-' + slugify(name);
   }
 
+  function exerciseIdentityKey(exercise) {
+    return slugify(exercise && exercise.name);
+  }
+
+  function isLibExerciseId(id) {
+    return String(id || '').indexOf('lib-') === 0;
+  }
+
+  function mergeExerciseMaster(existing, incoming) {
+    if (!existing) return clone(incoming);
+    if (!incoming) return clone(existing);
+    if (isLibExerciseId(existing.id) && !isLibExerciseId(incoming.id)) return clone(incoming);
+    if (!isLibExerciseId(existing.id) && isLibExerciseId(incoming.id)) return clone(existing);
+    return clone(existing);
+  }
+
+  function applyMasterFields(target, master) {
+    var next = clone(target);
+    next.name = master.name;
+    next.image = master.image || '';
+    next.imageId = master.imageId || '';
+    next.instructions = master.instructions || '';
+    next.notes = master.notes || '';
+    next.sets = master.sets;
+    next.reps = master.reps;
+    if (master.repsRange !== undefined) next.repsRange = master.repsRange;
+    else delete next.repsRange;
+    next.resistance = master.resistance;
+    next.resistanceType = master.resistanceType;
+    return next;
+  }
+
+  function collectScheduleWorkoutIds(workouts) {
+    return ['a', 'b', 'c'].filter(function (wid) {
+      return workouts && workouts[wid] && Array.isArray(workouts[wid].exercises);
+    });
+  }
+
+  function syncLibraryFromWorkouts(workouts, library) {
+    library = library && Array.isArray(library.exercises) ? library : { exercises: [] };
+    workouts = workouts || {};
+    var byKey = {};
+    library.exercises.forEach(function (ex) {
+      var key = exerciseIdentityKey(ex);
+      if (!key) return;
+      byKey[key] = mergeExerciseMaster(byKey[key], ex);
+    });
+
+    var changed = false;
+    collectScheduleWorkoutIds(workouts).forEach(function (wid) {
+      workouts[wid].exercises.forEach(function (ex) {
+        var key = exerciseIdentityKey(ex);
+        if (!key) return;
+        var prev = byKey[key];
+        var merged = mergeExerciseMaster(prev, ex);
+        if (!prev || merged.id !== prev.id || JSON.stringify(merged) !== JSON.stringify(prev)) {
+          changed = true;
+        }
+        byKey[key] = merged;
+      });
+    });
+
+    var result = [];
+    var seen = {};
+    collectScheduleWorkoutIds(workouts).forEach(function (wid) {
+      workouts[wid].exercises.forEach(function (ex) {
+        var key = exerciseIdentityKey(ex);
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        result.push(clone(byKey[key] || ex));
+      });
+    });
+    library.exercises.forEach(function (ex) {
+      var key = exerciseIdentityKey(ex);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      result.push(clone(byKey[key] || ex));
+    });
+
+    if (result.length !== library.exercises.length) changed = true;
+    return { library: { exercises: result }, changed: changed };
+  }
+
+  function propagateExerciseMaster(exercise, workouts, library) {
+    var key = exerciseIdentityKey(exercise);
+    if (!key) return { workouts: workouts, library: library, changed: false };
+    var master = clone(exercise);
+    var changed = false;
+    library = library && Array.isArray(library.exercises) ? library : { exercises: [] };
+
+    var foundInLibrary = false;
+    library.exercises = library.exercises.map(function (ex) {
+      if (exerciseIdentityKey(ex) !== key) return ex;
+      foundInLibrary = true;
+      changed = true;
+      return applyMasterFields(ex, master);
+    });
+    if (!foundInLibrary) {
+      library.exercises.push(clone(master));
+      changed = true;
+    }
+
+    Object.keys(workouts || {}).forEach(function (wid) {
+      var workout = workouts[wid];
+      if (!workout || !Array.isArray(workout.exercises)) return;
+      workout.exercises = workout.exercises.map(function (ex) {
+        if (exerciseIdentityKey(ex) !== key) return ex;
+        changed = true;
+        return applyMasterFields(ex, master);
+      });
+    });
+
+    return { workouts: workouts, library: library, changed: changed };
+  }
+
+  function workoutHasExerciseIdentity(workout, exercise) {
+    if (!workout || !Array.isArray(workout.exercises) || !exercise) return false;
+    var key = exerciseIdentityKey(exercise);
+    return workout.exercises.some(function (ex) {
+      return exerciseIdentityKey(ex) === key;
+    });
+  }
+
   function parseLegacyMeta(meta) {
     var sets = 3;
     var reps = 10;
@@ -734,25 +857,28 @@
     return normalizeExercise(exercise, 'lib');
   }
 
-  function loadLibrary() {
+  function loadLibrary(workouts) {
     var stored = readJson(STORAGE_KEYS.library, null);
     if (!stored || !Array.isArray(stored.exercises)) {
-      var fresh = { exercises: clone(DEFAULT_LIBRARY) };
-      writeJson(STORAGE_KEYS.library, fresh);
-      return fresh;
+      stored = { exercises: clone(DEFAULT_LIBRARY) };
     }
     stored.exercises = stored.exercises.map(normalizeLibraryExercise);
-    // Ensure seed catalog items exist by id without wiping user-added ones
     var byId = {};
     stored.exercises.forEach(function (ex) { byId[ex.id] = true; });
-    var changed = false;
+    var seedChanged = false;
     DEFAULT_LIBRARY.forEach(function (seed) {
       if (!byId[seed.id]) {
         stored.exercises.push(clone(seed));
-        changed = true;
+        seedChanged = true;
       }
     });
-    if (changed) writeJson(STORAGE_KEYS.library, stored);
+    if (workouts) {
+      var synced = syncLibraryFromWorkouts(workouts, stored);
+      stored = synced.library;
+      if (synced.changed || seedChanged) writeJson(STORAGE_KEYS.library, stored);
+      return stored;
+    }
+    if (seedChanged) writeJson(STORAGE_KEYS.library, stored);
     return stored;
   }
 
@@ -829,6 +955,11 @@
     getTodayWeekIndex: getTodayWeekIndex,
     getTodayWorkoutId: getTodayWorkoutId,
     makeExerciseId: makeExerciseId,
+    exerciseIdentityKey: exerciseIdentityKey,
+    syncLibraryFromWorkouts: syncLibraryFromWorkouts,
+    propagateExerciseMaster: propagateExerciseMaster,
+    workoutHasExerciseIdentity: workoutHasExerciseIdentity,
+    applyMasterFields: applyMasterFields,
     formatTime: formatTime,
     formatDateVi: formatDateVi,
     completionStatusLabel: completionStatusLabel,

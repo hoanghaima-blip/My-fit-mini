@@ -4,7 +4,7 @@
   var D = window.MyFitData;
   var Img = window.MyFitImages;
   var workouts = D.loadWorkouts();
-  var library = D.loadLibrary();
+  var library = D.loadLibrary(workouts);
   var currentWorkoutId = D.loadLastDay() || 'a';
   var selectedExerciseIndex = 0;
   var selectedLibraryIndex = -1;
@@ -103,6 +103,36 @@
 
   function persistWorkouts() {
     D.saveWorkouts(workouts);
+    syncExerciseCatalog();
+  }
+
+  function syncExerciseCatalog() {
+    var synced = D.syncLibraryFromWorkouts(workouts, library);
+    library = synced.library;
+    if (synced.changed) D.saveLibrary(library);
+  }
+
+  function applyMasterExerciseUpdate(exercise) {
+    var result = D.propagateExerciseMaster(exercise, workouts, library);
+    workouts = result.workouts;
+    library = result.library;
+    if (result.changed) {
+      D.saveWorkouts(workouts);
+      D.saveLibrary(library);
+    }
+  }
+
+  function isExternalImageUrl(value) {
+    var url = String(value || '').trim();
+    return /^https?:\/\//i.test(url) || /^data:/i.test(url);
+  }
+
+  function imageFieldDisplayValue(exercise) {
+    var image = exercise && exercise.image ? String(exercise.image).trim() : '';
+    if (!image) return '';
+    if (D.isStableAssetPath(image)) return '';
+    if (isExternalImageUrl(image)) return image;
+    return image;
   }
 
   function persistSession() {
@@ -510,6 +540,8 @@
     }
 
     if (state.clearImage) {
+      base.image = '';
+      base.imageId = '';
       return Promise.resolve(base);
     }
 
@@ -522,6 +554,10 @@
 
     base.image = state.existingImage || '';
     base.imageId = state.existingImageId || '';
+    if (!base.image && !base.imageId && existingId) {
+      var catalog = D.catalogImageForExercise({ id: existingId, name: base.name });
+      if (catalog) base.image = catalog;
+    }
     return Promise.resolve(base);
   }
 
@@ -532,7 +568,7 @@
     fields.name.value = exercise.name;
     fields.instructions.value = exercise.instructions || '';
     fields.notes.value = exercise.notes || '';
-    fields.image.value = exercise.image || '';
+    fields.image.value = imageFieldDisplayValue(exercise);
     fields.sets.value = exercise.sets;
     fields.reps.value = exercise.reps;
     fields.resistance.value = exercise.resistance;
@@ -540,6 +576,10 @@
     if (fields.imageFile) fields.imageFile.value = '';
     formImageState[mode].existingImageId = exercise.imageId || '';
     formImageState[mode].existingImage = exercise.image || '';
+    if (!formImageState[mode].existingImage && !formImageState[mode].existingImageId) {
+      var catalog = D.catalogImageForExercise(exercise);
+      if (catalog) formImageState[mode].existingImage = catalog;
+    }
     Img.resolveImageSrc(exercise).then(function (src) {
       formImageState[mode].previewUrl = src;
       showFormPreview(form, src);
@@ -574,6 +614,7 @@
     if (realIndex < 0) return;
     readExerciseForm(els.editForm, displayed.id, currentWorkoutId).then(function (exercise) {
       workout.exercises[realIndex] = exercise;
+      applyMasterExerciseUpdate(exercise);
       persistWorkouts();
       closeEdit();
       renderAll();
@@ -604,6 +645,7 @@
     if (!workout || realIndex < 0) return;
     readExerciseForm(els.replaceForm, null, currentWorkoutId).then(function (replacement) {
       workout.exercises[realIndex] = replacement;
+      applyMasterExerciseUpdate(replacement);
       persistWorkouts();
       closeReplace();
       renderAll();
@@ -734,6 +776,7 @@
       if (!library.exercises) library.exercises = [];
       library.exercises.push(exercise);
       persistLibrary();
+      syncExerciseCatalog();
       closeAddExerciseForm();
       renderLibrary();
     }).catch(function (err) {
@@ -771,8 +814,13 @@
     var exercise = library.exercises[selectedLibraryIndex];
     var workout = getWorkout(workoutId);
     if (!exercise || !workout) return;
+    if (D.workoutHasExerciseIdentity(workout, exercise)) {
+      closeAddToSchedulePicker();
+      currentWorkoutId = workoutId;
+      showHome();
+      return;
+    }
     var copy = D.clone(exercise);
-    copy.id = D.makeExerciseId(workoutId, exercise.name + '-' + Date.now());
     workout.exercises.push(copy);
     persistWorkouts();
     closeAddToSchedulePicker();

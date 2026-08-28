@@ -407,7 +407,7 @@ async function run() {
     assert(detail.style.display === 'flex', 'history detail overlay opens');
     const content = window.document.getElementById('history-detail-content').textContent;
     assert(content.includes('Exercise One'), 'detail shows exercise name');
-    assert(content.includes('Actual sets'), 'detail shows actual sets');
+    assert(content.includes('Set hoàn thành'), 'detail shows actual sets');
     pass('TEST 11: completed workout appears in history UI with detail');
   } catch (err) {
     fail('TEST 11', err);
@@ -712,17 +712,20 @@ async function run() {
     session.exercises[0].actualSetsCompleted = 3;
     session.exercises[0].completionStatus = 'completed';
     session.exercises[0].snapshot.resistance = 10; // default stays 10
-    // add supplemental
+    // add supplemental at next slot (not append)
     const lib = D2.loadLibrary();
     assert(lib.exercises.length >= 5, 'library seeded');
     const kick = lib.exercises.find((e) => /cable kickback/i.test(e.name));
-    session.exercises.push(D2.createSessionExercise(kick, 'supplemental'));
-    session.exercises[session.exercises.length - 1].actualSetsCompleted = 2;
-    session.exercises[session.exercises.length - 1].setLogs[0].resistance = 8;
-    session.exercises[session.exercises.length - 1].setLogs[0].completed = true;
-    session.exercises[session.exercises.length - 1].setLogs[1].resistance = 8;
-    session.exercises[session.exercises.length - 1].setLogs[1].completed = true;
-    session.exercises[session.exercises.length - 1].completionStatus = 'completed';
+    const insertAt = 1;
+    session.exercises.splice(insertAt, 0, D2.createSessionExercise(kick, 'supplemental'));
+    session.exercises[insertAt].actualSetsCompleted = 2;
+    session.exercises[insertAt].setLogs[0].resistance = 8;
+    session.exercises[insertAt].setLogs[0].completed = true;
+    session.exercises[insertAt].setLogs[1].resistance = 8;
+    session.exercises[insertAt].setLogs[1].completed = true;
+    session.exercises[insertAt].completionStatus = 'completed';
+    assert(session.exercises[insertAt].role === 'supplemental', 'supplemental at insert slot');
+    assert(session.exercises[insertAt].snapshot.name === kick.name, 'supplemental is kickback');
     session.endTime = new Date().toISOString();
     const entry = D2.finalizeHistoryEntry(session);
     assert(entry.exercises[0].snapshot.resistance === 10, 'exercise default resistance preserved');
@@ -1012,6 +1015,116 @@ async function run() {
     second.dom.window.close();
   } catch (err) {
     fail('TEST 25', err);
+  }
+
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const app = window.MyFitApp;
+    const doc = window.document;
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
+
+    assert(!html.includes('workout-add-exercise-btn'), 'set screen add button removed');
+    assert(html.includes('rest-pick-exercise-btn'), 'rest pick exercise button exists');
+    assert(html.includes('workout-pick-exercise-btn'), 'workout pick exercise button exists');
+    assert(html.includes('w-resistance-history-btn'), 'resistance history button exists');
+    const workoutResistanceSelect = html.match(/id="w-set-resistance-type"[\s\S]*?<\/select>/);
+    assert(workoutResistanceSelect && !/bodyweight/.test(workoutResistanceSelect[0]), 'workout resistance dropdown has kg and Band only');
+    assert(D.formatResistance({ resistanceType: 'band' }) === 'Band', 'Band label in meta');
+    assert(D.formatResistance({ resistance: 20, resistanceType: 'kg' }) === '20 kg', 'kg label in meta');
+    assert(typeof D.getExerciseLoadHistory === 'function', 'getExerciseLoadHistory exported');
+
+    app.setActiveSession(null);
+    app.startWorkout(0);
+    let session = app.getActiveSession();
+    const workout = D.loadWorkouts().a;
+    const lib = D.loadLibrary();
+    const kick = lib.exercises.find((e) => /cable kickback/i.test(e.name));
+    assert(kick, 'kickback in library');
+
+    session.currentExerciseIndex = 2;
+    session.currentSet = 1;
+    app.insertSupplementalExercise(kick, { jumpNow: false });
+    session = app.getActiveSession();
+    assert(session.exercises.length === workout.exercises.length + 1, 'one supplemental inserted');
+    assert(session.exercises[3].role === 'supplemental', 'supplemental at index 3 after exercise 3');
+    assert(session.currentExerciseIndex === 2, 'still on exercise 3 when not jumping');
+    assert(session.exercises[4].snapshot.name === workout.exercises[3].name, 'scheduled order preserved after supplemental');
+
+    // jump on rest pick flow (fresh session)
+    resetStorage();
+    const jumpWin = loadApp();
+    const appJump = jumpWin.window.MyFitApp;
+    appJump.setActiveSession(null);
+    appJump.startWorkout(0);
+    let jumpSession = appJump.getActiveSession();
+    jumpSession.currentExerciseIndex = 2;
+    jumpSession.exercises[2].completionStatus = 'completed';
+    jumpSession.phase = 'rest-exercise';
+    jumpSession.restKind = 'exercise';
+    const kick2 = jumpWin.window.MyFitData.loadLibrary().exercises.find((e) => /cable kickback/i.test(e.name));
+    appJump.insertSupplementalExercise(kick2, { jumpNow: true });
+    jumpSession = appJump.getActiveSession();
+    assert(jumpSession.phase === 'exercise', 'jump starts supplemental exercise');
+    assert(jumpSession.exercises[jumpSession.currentExerciseIndex].role === 'supplemental', 'jumped to supplemental');
+    jumpWin.dom.window.close();
+
+    // resistance history from completed sets
+    resetStorage();
+    const histApp = loadApp();
+    const D3 = histApp.window.MyFitData;
+    const app3 = histApp.window.MyFitApp;
+    app3.setActiveSession(null);
+    app3.startWorkout(0);
+    let s2 = app3.getActiveSession();
+    s2.exercises[0].setLogs[0].resistance = 10;
+    s2.exercises[0].setLogs[0].completed = true;
+    s2.exercises[0].actualSetsCompleted = 1;
+    s2.exercises[0].completionStatus = 'completed';
+    s2.endTime = new Date().toISOString();
+    s2.phase = 'complete';
+    const histEntry = D3.finalizeHistoryEntry(s2);
+    const history = D3.loadHistory();
+    history.unshift(histEntry);
+    D3.saveHistory(history);
+    const exId = s2.exercises[0].snapshot.id;
+    const rows = D3.getExerciseLoadHistory(exId, D3.exerciseIdentityKey(s2.exercises[0].snapshot));
+    assert(rows.length >= 1, 'load history has entries');
+    assert(rows[0].logs[0].resistance === 10, 'load history shows set resistance');
+
+    // history detail preserves performance order
+    const ordered = [
+      D3.createSessionExercise(D3.loadWorkouts().a.exercises[0], 'scheduled'),
+      D3.createSessionExercise(kick, 'supplemental'),
+      D3.createSessionExercise(D3.loadWorkouts().a.exercises[1], 'scheduled')
+    ];
+    ordered[0].completionStatus = 'completed';
+    ordered[1].completionStatus = 'completed';
+    ordered[2].completionStatus = 'completed';
+    const orderEntry = {
+      workoutName: 'Order test',
+      date: '2026-08-12',
+      startTime: new Date().toISOString(),
+      endTime: new Date().toISOString(),
+      estimatedDuration: 100,
+      actualDuration: 100,
+      exercises: ordered
+    };
+    history.unshift(orderEntry);
+    D3.saveHistory(history);
+    app3.openHistoryDetail(0);
+    const detailHtml = histApp.window.document.getElementById('history-detail-content').innerHTML;
+    const firstPos = detailHtml.indexOf(ordered[0].snapshot.name);
+    const suppPos = detailHtml.indexOf(kick.name);
+    const secondPos = detailHtml.indexOf(ordered[2].snapshot.name);
+    assert(firstPos >= 0 && suppPos > firstPos && secondPos > suppPos, 'history detail follows performance order');
+
+    pass('TEST 26: supplemental insert + pick UI + load history + order');
+    dom.window.close();
+    histApp.dom.window.close();
+  } catch (err) {
+    fail('TEST 26', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

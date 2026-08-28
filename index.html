@@ -287,13 +287,13 @@
       <div class="set-resistance-area">
         <div class="set-resistance-label">Mức tạ</div>
         <button type="button" class="resistance-chip" id="w-resistance-chip" aria-label="Chỉnh mức tạ SET này">—</button>
+        <button type="button" class="resistance-history-btn" id="w-resistance-history-btn">Lịch sử tạ</button>
         <div class="set-resistance-editor" id="w-resistance-editor" hidden>
           <div class="set-resistance-row">
-            <input id="w-set-resistance" type="number" min="0" step="0.5" inputmode="decimal" tabindex="-1">
-            <select id="w-set-resistance-type" tabindex="-1">
+            <input id="w-set-resistance" type="number" min="0" step="0.5" inputmode="decimal" tabindex="-1" aria-label="Mức tạ">
+            <select id="w-set-resistance-type" tabindex="-1" aria-label="Đơn vị">
               <option value="kg">kg</option>
-              <option value="band">band</option>
-              <option value="bodyweight">bodyweight</option>
+              <option value="band">Band</option>
             </select>
           </div>
           <p class="set-resistance-hint">Chỉ đổi SET hiện tại. Không đổi mức mặc định của bài.</p>
@@ -301,11 +301,11 @@
         </div>
       </div>
       <div id="wset" class="note"></div>
-      <button type="button" class="btn-secondary workout-secondary-action" id="workout-add-exercise-btn">+ Thêm bài tập vào buổi này</button>
     </div>
     <div class="workout-actions" id="workout-actions">
       <button type="button" class="complete" id="complete-set-btn">Hoàn thành SET</button>
       <button type="button" class="btn-secondary" id="complete-exercise-btn">Hoàn thành bài tập</button>
+      <button type="button" class="btn-secondary workout-pick-btn" id="workout-pick-exercise-btn" hidden>+ Chọn bài</button>
     </div>
   </div>
 </div>
@@ -315,9 +315,18 @@
     <div id="rest-label" class="rest-label"></div>
     <div id="rest-timer" class="rest-timer">01:00</div>
     <div class="rest-actions">
-      <button type="button" class="rest-skip" id="rest-skip-btn">Bỏ qua</button>
+      <button type="button" class="rest-skip" id="rest-skip-btn">Bài tiếp theo</button>
+      <button type="button" class="rest-pick" id="rest-pick-exercise-btn">+ Chọn bài</button>
       <button type="button" class="rest-add" id="rest-add-btn">+15 giây</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="resistance-history-overlay">
+  <div class="modal">
+    <button type="button" class="closex" id="resistance-history-close-btn">×</button>
+    <h2 id="resistance-history-title">Lịch sử tạ</h2>
+    <div id="resistance-history-content" class="resistance-history-content"></div>
   </div>
 </div>
 

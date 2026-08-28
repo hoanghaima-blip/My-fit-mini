@@ -526,11 +526,8 @@
   }
 
   function formatResistance(exercise) {
-    if (exercise.resistanceType === 'bodyweight') return 'Bodyweight';
-    if (exercise.resistanceType === 'band') {
-      return exercise.resistance > 0 ? 'Band · ' + exercise.resistance : 'Band';
-    }
-    if (!exercise.resistance) return 'Nhẹ';
+    if (exercise.resistanceType === 'band' || exercise.resistanceType === 'bodyweight') return 'Band';
+    if (!exercise.resistance) return '0 kg';
     return exercise.resistance + ' kg';
   }
 
@@ -655,12 +652,28 @@
   function formatSetLogLine(log) {
     if (!log) return '';
     var label = 'SET ' + (log.setNumber || '?') + ' – ';
-    if (log.resistanceType === 'bodyweight') return label + 'Bodyweight';
-    if (log.resistanceType === 'band') {
-      return label + (log.resistance > 0 ? 'Band · ' + log.resistance : 'Band');
-    }
-    if (!log.resistance) return label + 'Nhẹ';
-    return label + log.resistance + ' kg';
+    if (log.resistanceType === 'band' || log.resistanceType === 'bodyweight') return label + 'Band';
+    return label + (log.resistance != null ? log.resistance : 0) + ' kg';
+  }
+
+  function getExerciseLoadHistory(exerciseId, identityKey) {
+    var history = loadHistory();
+    var rows = [];
+    history.forEach(function (entry) {
+      (entry.exercises || []).forEach(function (item) {
+        var snap = item.snapshot || {};
+        var key = exerciseIdentityKey(snap);
+        if (snap.id !== exerciseId && key !== identityKey) return;
+        var logs = (item.setLogs || []).filter(function (log) { return log.completed; });
+        if (!logs.length) return;
+        rows.push({
+          date: entry.date,
+          dateLabel: formatDateVi(entry.date),
+          logs: logs.slice()
+        });
+      });
+    });
+    return rows;
   }
 
   function createSessionExercise(exercise, role) {
@@ -942,6 +955,7 @@
     createSetLogs: createSetLogs,
     ensureSetLogs: ensureSetLogs,
     formatSetLogLine: formatSetLogLine,
+    getExerciseLoadHistory: getExerciseLoadHistory,
     DEFAULT_LIBRARY: DEFAULT_LIBRARY,
     loadLibrary: loadLibrary,
     saveLibrary: saveLibrary,

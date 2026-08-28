@@ -9,6 +9,7 @@
   var selectedExerciseIndex = 0;
   var selectedLibraryIndex = -1;
   var pickMode = ''; // 'session' | 'library-detail'
+  var pickJumpAfterInsert = false;
   var activeSession = D.loadActiveSession();
   var restTimerId = null;
   var resumePromptShown = false;
@@ -67,7 +68,14 @@
     replaceForm: document.getElementById('replace-form'),
     addExerciseForm: document.getElementById('add-exercise-form'),
     historyDetailOverlay: document.getElementById('history-detail-overlay'),
-    historyDetailContent: document.getElementById('history-detail-content')
+    historyDetailContent: document.getElementById('history-detail-content'),
+    workoutPickBtn: document.getElementById('workout-pick-exercise-btn'),
+    restPickBtn: document.getElementById('rest-pick-exercise-btn'),
+    restSkipBtn: document.getElementById('rest-skip-btn'),
+    resistanceHistoryBtn: document.getElementById('w-resistance-history-btn'),
+    resistanceHistoryOverlay: document.getElementById('resistance-history-overlay'),
+    resistanceHistoryContent: document.getElementById('resistance-history-content'),
+    resistanceHistoryTitle: document.getElementById('resistance-history-title')
   };
 
   function persistLibrary() {
@@ -309,40 +317,28 @@
       '<div class="history-row"><span>Sets planned / actual</span><strong>' + summary.plannedSets + ' / ' + summary.actualSets + '</strong></div>' +
       '<div class="history-detail-list">';
 
-    function renderHistoryItems(items, heading) {
-      if (!items.length) return;
-      html += '<div class="history-group-title">' + escapeHtml(heading) + '</div>';
-      items.forEach(function (item) {
-        var globalIndex = entry.exercises.indexOf(item);
-        var snap = item.snapshot || {};
-        var status = item.completionStatus || 'pending';
-        var ensured = D.ensureSetLogs(D.clone(item));
-        var setLines = (ensured.setLogs || []).filter(function (log) { return log.completed; });
-        if (!setLines.length && (item.actualSetsCompleted || 0) > 0) {
-          setLines = ensured.setLogs || [];
-        }
-        html +=
-          '<div class="history-exercise" data-history-ex="' + globalIndex + '">' +
-            placeholderImageHtml('card-image') +
-            '<div class="name">' + escapeHtml(snap.name || 'Bài tập') + '</div>' +
-            '<div class="meta">Planned: ' + (item.plannedSets || snap.sets || 0) + ' × ' + (item.plannedReps || snap.reps || 0) + '</div>' +
-            '<div class="meta">Actual sets: ' + (item.actualSetsCompleted || 0) + '</div>' +
-            setLines.map(function (log) {
-              return '<div class="set-log-line">' + escapeHtml(D.formatSetLogLine(log)) + '</div>';
-            }).join('') +
-            '<span class="status-pill ' + escapeHtml(status) + '">' + escapeHtml(D.completionStatusLabel(status)) + '</span>' +
-          '</div>';
-      });
-    }
+    (entry.exercises || []).forEach(function (item, globalIndex) {
+      var snap = item.snapshot || {};
+      var status = item.completionStatus || 'pending';
+      var roleBadge = item.role === 'supplemental' ? ' · Bổ sung' : '';
+      var ensured = D.ensureSetLogs(D.clone(item));
+      var setLines = (ensured.setLogs || []).filter(function (log) { return log.completed; });
+      if (!setLines.length && (item.actualSetsCompleted || 0) > 0) {
+        setLines = ensured.setLogs || [];
+      }
+      html +=
+        '<div class="history-exercise" data-history-ex="' + globalIndex + '">' +
+          placeholderImageHtml('card-image') +
+          '<div class="name">' + escapeHtml(snap.name || 'Bài tập') + escapeHtml(roleBadge) + '</div>' +
+          '<div class="meta">' + escapeHtml(D.formatExerciseMeta(snap)) + '</div>' +
+          '<div class="meta">Set hoàn thành: ' + (item.actualSetsCompleted || 0) + '/' + (item.plannedSets || snap.sets || 0) + '</div>' +
+          setLines.map(function (log) {
+            return '<div class="set-log-line">' + escapeHtml(D.formatSetLogLine(log)) + '</div>';
+          }).join('') +
+          '<span class="status-pill ' + escapeHtml(status) + '">' + escapeHtml(D.completionStatusLabel(status)) + '</span>' +
+        '</div>';
+    });
 
-    var scheduled = (entry.exercises || []).filter(function (item) { return item.role !== 'supplemental'; });
-    var supplemental = (entry.exercises || []).filter(function (item) { return item.role === 'supplemental'; });
-    if (entry.sessionKind === 'library' && !supplemental.length) {
-      renderHistoryItems(scheduled, 'Bài đã tập');
-    } else {
-      renderHistoryItems(scheduled, 'Bài theo lịch');
-      renderHistoryItems(supplemental, 'Bài bổ sung');
-    }
     html += '</div>';
     els.historyDetailContent.innerHTML = html;
     showOverlay(els.historyDetailOverlay);
@@ -775,9 +771,9 @@
   function startLibraryExercise(index) {
     var exercise = library.exercises[index];
     if (!exercise) return;
-    if (activeSession && activeSession.phase !== 'complete' && !resumePromptShown) {
-      // If a schedule session is in progress, prefer adding as supplemental.
-      addExerciseToActiveSession(exercise);
+    if (activeSession && activeSession.phase !== 'complete') {
+      var jumpNow = activeSession.phase === 'rest-exercise';
+      insertSupplementalExercise(exercise, { jumpNow: jumpNow });
       return;
     }
     resumePromptShown = true;
@@ -816,10 +812,14 @@
     showHome();
   }
 
-  function openPickExerciseForSession() {
+  function openPickExerciseForSession(options) {
+    options = options || {};
     pickMode = 'session';
-    if (els.pickExerciseTitle) els.pickExerciseTitle.textContent = 'Thêm bài vào buổi đang tập';
-    if (els.pickExerciseIntro) els.pickExerciseIntro.textContent = 'Bài được chọn sẽ là BÀI BỔ SUNG trong cùng active session / History.';
+    pickJumpAfterInsert = !!options.jumpAfterInsert;
+    if (els.pickExerciseTitle) els.pickExerciseTitle.textContent = 'Chọn bài';
+    if (els.pickExerciseIntro) {
+      els.pickExerciseIntro.textContent = 'Bài được chọn sẽ thêm vào buổi tập hiện tại (bài bổ sung). Lịch cố định không thay đổi.';
+    }
     renderPickExerciseList();
     showOverlay(els.pickExerciseOverlay);
   }
@@ -827,6 +827,7 @@
   function closePickExercise() {
     hideOverlay(els.pickExerciseOverlay);
     pickMode = '';
+    pickJumpAfterInsert = false;
   }
 
   function renderPickExerciseList() {
@@ -841,39 +842,49 @@
         '<div class="card">' +
           '<div class="name">' + escapeHtml(exercise.name) + '</div>' +
           '<div class="meta">' + escapeHtml(D.formatExerciseMeta(exercise)) + '</div>' +
-          '<button type="button" class="btn" data-pick-index="' + index + '">Thêm bài này</button>' +
+          '<button type="button" class="btn" data-pick-index="' + index + '">Chọn bài này</button>' +
         '</div>'
       );
     }).join('');
   }
 
-  function addExerciseToActiveSession(exercise) {
+  function insertSupplementalExercise(exercise, options) {
+    options = options || {};
+    var jumpNow = options.jumpNow != null ? options.jumpNow : pickJumpAfterInsert;
     if (!activeSession || activeSession.phase === 'complete') {
-      // Start a schedule session if missing, then append.
       var workout = getWorkout(currentWorkoutId);
       if (!workout) return;
       resumePromptShown = true;
       activeSession = D.createWorkoutSession(workout);
+      jumpNow = true;
     }
     var item = D.createSessionExercise(exercise, 'supplemental');
-    activeSession.exercises.push(item);
+    var insertAt = Math.min((activeSession.currentExerciseIndex || 0) + 1, activeSession.exercises.length);
+    activeSession.exercises.splice(insertAt, 0, item);
     activeSession.estimatedDuration = D.estimateWorkoutSeconds({
       exercises: activeSession.exercises.map(function (ex) { return ex.snapshot; })
     });
     persistSession();
     closePickExercise();
-    if (els.workoutOverlay && els.workoutOverlay.style.display === 'flex') {
-      // stay on current exercise
-      showWorkoutView();
-    } else {
-      // jump to the newly added exercise
-      activeSession.currentExerciseIndex = activeSession.exercises.length - 1;
+    if (jumpNow) {
+      clearRestTimer();
+      hideOverlay(els.restOverlay);
+      activeSession.currentExerciseIndex = insertAt;
       activeSession.currentSet = 1;
       activeSession.phase = 'exercise';
+      activeSession.restEndTime = null;
+      activeSession.restRemaining = 0;
+      activeSession.restKind = null;
       persistSession();
+      showWorkoutView();
+    } else if (els.workoutOverlay && els.workoutOverlay.style.display === 'flex') {
       showWorkoutView();
     }
     renderAll();
+  }
+
+  function addExerciseToActiveSession(exercise, options) {
+    insertSupplementalExercise(exercise, options);
   }
 
   function clearRestTimer() {
@@ -889,6 +900,52 @@
     els.restTimer.textContent = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
   }
 
+  function updateRestActions() {
+    if (!activeSession) return;
+    var isExerciseRest = activeSession.phase === 'rest-exercise' || activeSession.restKind === 'exercise';
+    if (els.restSkipBtn) {
+      els.restSkipBtn.textContent = isExerciseRest ? 'Bài tiếp theo' : 'SET tiếp theo';
+    }
+    if (els.restPickBtn) {
+      els.restPickBtn.hidden = !isExerciseRest;
+    }
+  }
+
+  function updateWorkoutPickButton() {
+    if (!els.workoutPickBtn || !activeSession) return;
+    els.workoutPickBtn.hidden = activeSession.phase !== 'exercise';
+  }
+
+  function openResistanceHistory() {
+    var current = getCurrentExercise();
+    if (!current) return;
+    var snap = current.snapshot || {};
+    var rows = D.getExerciseLoadHistory(snap.id, D.exerciseIdentityKey(snap));
+    if (els.resistanceHistoryTitle) {
+      els.resistanceHistoryTitle.textContent = 'Lịch sử tạ · ' + (snap.name || '');
+    }
+    if (!els.resistanceHistoryContent) return;
+    if (!rows.length) {
+      els.resistanceHistoryContent.innerHTML = '<p class="note">Chưa có lịch sử mức tạ cho bài này.</p>';
+    } else {
+      els.resistanceHistoryContent.innerHTML = rows.map(function (row) {
+        return (
+          '<div class="resistance-history-day">' +
+            '<div class="resistance-history-date">' + escapeHtml(row.dateLabel) + ':</div>' +
+            row.logs.map(function (log) {
+              return '<div class="set-log-line">' + escapeHtml(D.formatSetLogLine(log)) + '</div>';
+            }).join('') +
+          '</div>'
+        );
+      }).join('');
+    }
+    showOverlay(els.resistanceHistoryOverlay);
+  }
+
+  function closeResistanceHistory() {
+    hideOverlay(els.resistanceHistoryOverlay);
+  }
+
   function beginRest(kind, seconds) {
     activeSession.phase = kind === 'set' ? 'rest-set' : 'rest-exercise';
     activeSession.restKind = kind;
@@ -898,6 +955,7 @@
     hideOverlay(els.workoutOverlay);
     els.restLabel.textContent = kind === 'set' ? 'Nghỉ giữa SET' : 'Nghỉ giữa BÀI TẬP';
     updateRestDisplay(seconds);
+    updateRestActions();
     showOverlay(els.restOverlay, 'flex');
     clearRestTimer();
     restTimerId = setInterval(tickRest, 1000);
@@ -1024,7 +1082,9 @@
       els.wSetResistance.value = log.resistance != null ? log.resistance : 0;
     }
     if (els.wSetResistanceType) {
-      els.wSetResistanceType.value = log.resistanceType || 'kg';
+      var uiType = log.resistanceType || 'kg';
+      if (uiType === 'bodyweight') uiType = 'band';
+      els.wSetResistanceType.value = uiType;
     }
     if (els.wResistanceChip) {
       els.wResistanceChip.textContent = formatResistanceChip(log);
@@ -1084,6 +1144,7 @@
     if (els.wResistanceEditor) els.wResistanceEditor.hidden = true;
     writeCurrentSetResistanceToUi(log);
     updatePrimaryActionLabel();
+    updateWorkoutPickButton();
     applyImageToElement(els.wimage, snap);
     hideOverlay(els.restOverlay);
     hideOverlay(els.completionOverlay);
@@ -1254,7 +1315,11 @@
     if (saveOrderBtn) saveOrderBtn.addEventListener('click', saveDisplayedOrderAsDefault);
 
     var addToSessionBtn = document.getElementById('add-to-session-btn');
-    if (addToSessionBtn) addToSessionBtn.addEventListener('click', openPickExerciseForSession);
+    if (addToSessionBtn) {
+      addToSessionBtn.addEventListener('click', function () {
+        openPickExerciseForSession({ jumpAfterInsert: false });
+      });
+    }
 
     els.list.addEventListener('click', function (event) {
       var target = event.target.closest('[data-action]');
@@ -1315,7 +1380,7 @@
         if (!btn) return;
         var exercise = library.exercises[parseInt(btn.dataset.pickIndex, 10)];
         if (!exercise) return;
-        if (pickMode === 'session') addExerciseToActiveSession(exercise);
+        if (pickMode === 'session') insertSupplementalExercise(exercise);
       });
     }
 
@@ -1359,14 +1424,30 @@
       });
     }
 
+    if (els.wResistanceHistoryBtn) {
+      els.wResistanceHistoryBtn.addEventListener('click', openResistanceHistory);
+    }
+    var resistanceHistoryCloseBtn = document.getElementById('resistance-history-close-btn');
+    if (resistanceHistoryCloseBtn) {
+      resistanceHistoryCloseBtn.addEventListener('click', closeResistanceHistory);
+    }
+
     document.getElementById('complete-set-btn').addEventListener('click', completeSet);
     document.getElementById('complete-exercise-btn').addEventListener('click', function () {
       if (isResistanceEditorOpen()) closeResistanceEditor();
       completeExercise(true);
     });
     document.getElementById('workout-close-btn').addEventListener('click', closeWorkout);
-    var workoutAddBtn = document.getElementById('workout-add-exercise-btn');
-    if (workoutAddBtn) workoutAddBtn.addEventListener('click', openPickExerciseForSession);
+    if (els.workoutPickBtn) {
+      els.workoutPickBtn.addEventListener('click', function () {
+        openPickExerciseForSession({ jumpAfterInsert: false });
+      });
+    }
+    if (els.restPickBtn) {
+      els.restPickBtn.addEventListener('click', function () {
+        openPickExerciseForSession({ jumpAfterInsert: true });
+      });
+    }
     document.getElementById('rest-skip-btn').addEventListener('click', skipRest);
     document.getElementById('rest-add-btn').addEventListener('click', addRestSeconds);
     document.getElementById('completion-home-btn').addEventListener('click', closeCompletion);
@@ -1453,6 +1534,8 @@
     moveDisplayedExercise: moveDisplayedExercise,
     saveDisplayedOrderAsDefault: saveDisplayedOrderAsDefault,
     addExerciseToActiveSession: addExerciseToActiveSession,
+    insertSupplementalExercise: insertSupplementalExercise,
+    openResistanceHistory: openResistanceHistory,
     startLibraryExercise: startLibraryExercise
   };
 

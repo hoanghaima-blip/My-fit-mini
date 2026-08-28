@@ -601,7 +601,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="13"'), 'version meta is 13');
+    assert(html.includes('myfit-version" content="14"'), 'version meta is 14');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
@@ -613,8 +613,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v13'), 'service worker cache v9');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v13 + workout management');
+    assert(sw.includes('my-fit-mini-v14'), 'service worker cache v14');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v14 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }

@@ -1019,9 +1019,16 @@
     var isLastExercise = activeSession.currentExerciseIndex >= activeSession.exercises.length - 1;
     if (isLastSet && isLastExercise) {
       btn.textContent = 'Hoàn thành buổi tập';
+    } else if (isLastSet) {
+      btn.textContent = 'Bài tiếp theo';
     } else {
       btn.textContent = 'Hoàn thành SET';
     }
+  }
+
+  function resetWorkoutScroll() {
+    var scrollEl = document.querySelector('.workout-scroll');
+    if (scrollEl) scrollEl.scrollTop = 0;
   }
 
   function showWorkoutView() {
@@ -1045,6 +1052,7 @@
     hideOverlay(els.restOverlay);
     hideOverlay(els.completionOverlay);
     showOverlay(els.workoutOverlay, 'flex');
+    resetWorkoutScroll();
     persistSession();
   }
 

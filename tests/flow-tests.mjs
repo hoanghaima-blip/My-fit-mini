@@ -826,6 +826,89 @@ async function run() {
     fail('TEST 22', err);
   }
 
+  try {
+    const { window, dom } = loadApp();
+    resetStorage();
+    const D = window.MyFitData;
+    const app = window.MyFitApp;
+    const doc = window.document;
+    app.setActiveSession(null);
+    app.selectWorkout('a');
+    app.startWorkout(0);
+
+    const scroll = doc.querySelector('.workout-scroll');
+    const actions = doc.getElementById('workout-actions');
+    const completeBtn = doc.getElementById('complete-set-btn');
+    const workout = D.loadWorkouts().a;
+    assert(workout.exercises.length === 6, 'Glutes A has 6 exercises');
+    assert(scroll && actions && completeBtn, 'workout scroll + fixed actions present');
+    assert(!scroll.contains(actions), 'action bar is outside scroll content');
+    assert(!scroll.contains(completeBtn), 'primary action is outside scroll content');
+
+    workout.exercises.forEach((ex, idx) => {
+      const session = app.getActiveSession();
+      session.currentExerciseIndex = idx;
+      session.currentSet = 1;
+      session.phase = 'exercise';
+      app.showWorkoutView();
+      assert(doc.getElementById('complete-set-btn').textContent === 'Hoàn thành SET', 'mid-set label for ex ' + (idx + 1));
+      assert(doc.getElementById('workout-actions'), 'actions bar for ex ' + (idx + 1));
+      const snap = session.exercises[idx].snapshot;
+      session.currentSet = snap.sets;
+      app.showWorkoutView();
+      const label = doc.getElementById('complete-set-btn').textContent;
+      if (idx === workout.exercises.length - 1) {
+        assert(label === 'Hoàn thành buổi tập', 'last exercise last set label');
+      } else {
+        assert(label === 'Bài tiếp theo', 'last set label for ex ' + (idx + 1));
+      }
+      assert(snap.resistance >= 0, 'resistance numeric for ex ' + (idx + 1));
+      assert(['kg', 'band', 'bodyweight'].includes(snap.resistanceType), 'resistance type for ex ' + (idx + 1));
+    });
+
+    // T6 regression: all Glutes B exercises keep action button
+    app.setActiveSession(null);
+    app.selectWorkout('c');
+    app.startWorkout(0);
+    const glutesB = D.loadWorkouts().c;
+    glutesB.exercises.forEach((ex, idx) => {
+      const session = app.getActiveSession();
+      session.currentExerciseIndex = idx;
+      session.currentSet = 1;
+      app.showWorkoutView();
+      assert(doc.getElementById('complete-set-btn').textContent === 'Hoàn thành SET', 'Glutes B ex ' + (idx + 1));
+    });
+
+    // Full T2 flow without editing resistance + history check
+    app.setActiveSession(null);
+    app.selectWorkout('a');
+    app.startWorkout(0);
+    for (let ex = 0; ex < 6; ex += 1) {
+      const session = app.getActiveSession();
+      session.currentExerciseIndex = ex;
+      const sets = session.exercises[ex].snapshot.sets;
+      for (let set = 1; set <= sets; set += 1) {
+        session.currentSet = set;
+        session.phase = 'exercise';
+        app.showWorkoutView();
+        assert(doc.getElementById('complete-set-btn'), 'action visible ex ' + (ex + 1) + ' set ' + set);
+        app.completeSet();
+        if (set < sets) app.finishRestAdvance();
+      }
+      if (ex < 5) app.finishRestAdvance();
+    }
+    assert(!app.getActiveSession(), 'workout finished');
+    const history = D.loadHistory();
+    assert(history.length === 1, 'history entry saved');
+    assert(history[0].exercises.length === 6, 'history has 6 exercises');
+    assert(history[0].exercises[0].setLogs.length === 3, 'ex1 set logs saved');
+
+    pass('TEST 23: Glutes A all exercises keep fixed action bar + labels + full flow');
+    dom.window.close();
+  } catch (err) {
+    fail('TEST 23', err);
+  }
+
   console.log('\nMy Fit Mini Test Results');
   console.log('========================');
   results.forEach((result) => {

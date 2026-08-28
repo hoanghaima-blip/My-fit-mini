@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
-<meta name="myfit-version" content="17">
+<meta name="myfit-version" content="18">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=17">
-<link rel="icon" href="assets/icon-192.png?v=17">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=17">
+<link rel="stylesheet" href="styles.css?v=18">
+<link rel="icon" href="assets/icon-192.png?v=18">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=18">
 <title>My Fit Mini</title>
 <script>
 /* Force one-time PWA cache refresh when UI version changes.
    Preserves workout/history localStorage and IndexedDB image data. */
 (function () {
-  var EXPECTED = '17';
+  var EXPECTED = '18';
   var VERSION_KEY = 'myfit-ui-version';
-  var RELOAD_KEY = 'myfit-ui-reload-v17';
+  var RELOAD_KEY = 'myfit-ui-reload-v18';
   try {
     var current = localStorage.getItem(VERSION_KEY);
     if (current === EXPECTED) return;
@@ -50,11 +50,11 @@
 <body>
 
 <section id="welcome-screen" class="welcome-screen" aria-label="Trang chào My Fit Mini">
-  <div class="welcome-bg" id="welcome-bg" role="img" aria-label="Ảnh nền trang chào"></div>
+  <img class="welcome-bg" id="welcome-bg" src="assets/welcome-background.jpg" alt="" aria-hidden="true" decoding="async">
   <div class="welcome-overlay"></div>
   <div class="welcome-content">
     <p class="welcome-kicker">Chào mừng bạn đến với</p>
-    <img class="welcome-logo" src="assets/logo-header.png?v=17" alt="My Fit Mini">
+    <img class="welcome-logo" src="assets/logo-header.png?v=18" alt="My Fit Mini">
     <p class="welcome-tagline">Thức dậy và trở thành phiên bản mà chính bạn yêu thích !</p>
     <div class="welcome-actions">
       <button type="button" class="welcome-btn welcome-btn-primary" id="welcome-schedule-btn">Tập theo lịch cố định</button>
@@ -68,7 +68,7 @@
   <button type="button" class="home-back" id="home-back-btn" aria-label="Quay lại">← Quay lại</button>
 </div>
 <div class="brand">
-  <img class="brand-logo" src="assets/logo-header.png?v=17" alt="My Fit Mini">
+  <img class="brand-logo" src="assets/logo-header.png?v=18" alt="My Fit Mini">
 </div>
 <h1 class="title">Lịch tập của bạn</h1>
 
@@ -120,7 +120,7 @@
   <div class="wrap library-inner">
     <button type="button" class="library-back" id="library-back-btn">← Quay lại</button>
     <div class="brand">
-      <img class="brand-logo" src="assets/logo-header.png?v=17" alt="My Fit Mini">
+      <img class="brand-logo" src="assets/logo-header.png?v=18" alt="My Fit Mini">
     </div>
     <h1 class="title">Tập theo bài</h1>
     <p class="library-intro">Thư viện bài tập lẻ / bổ trợ. Đây không phải lịch tập cố định T2–T4–T6.</p>
@@ -331,8 +331,8 @@
   </div>
 </div>
 
-<script src="data.js?v=17"></script>
-<script src="images.js?v=17"></script>
-<script src="app.js?v=17"></script>
+<script src="data.js?v=18"></script>
+<script src="images.js?v=18"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

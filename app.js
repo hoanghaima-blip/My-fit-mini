@@ -654,7 +654,11 @@
   function applyWelcomeBackground() {
     if (!els.welcomeBg) return;
     var src = D.WELCOME_BACKGROUND_IMAGE || 'assets/welcome-background.jpg';
-    els.welcomeBg.style.backgroundImage = 'url("' + src.replace(/"/g, '\\"') + '")';
+    if (els.welcomeBg.tagName === 'IMG') {
+      els.welcomeBg.src = src;
+    } else {
+      els.welcomeBg.style.backgroundImage = 'url("' + src.replace(/"/g, '\\"') + '")';
+    }
   }
 
   function showWelcome() {

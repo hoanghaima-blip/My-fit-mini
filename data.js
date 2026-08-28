@@ -504,12 +504,51 @@
     writeJson(STORAGE_KEYS.workouts, workouts);
   }
 
+  var LEGACY_HISTORY_KEYS = ['myfit-history-v2', 'myfit-history-v1', 'myfit-history'];
+
+  function migrateHistoryEntry(entry) {
+    if (!entry || !Array.isArray(entry.exercises)) return entry;
+    entry.exercises = entry.exercises.map(function (item, index) {
+      var next = ensureSetLogs(clone(item));
+      if (next.role !== 'supplemental' && next.scheduledOrder == null) {
+        next.scheduledOrder = index + 1;
+      }
+      if (next.actualOrder == null && next.completionStatus === 'completed') {
+        next.actualOrder = index + 1;
+      }
+      return next;
+    });
+    entry.exercises.sort(function (a, b) {
+      var ao = a.actualOrder != null ? a.actualOrder : 9999;
+      var bo = b.actualOrder != null ? b.actualOrder : 9999;
+      if (ao !== bo) return ao - bo;
+      var so = (a.scheduledOrder || 9999) - (b.scheduledOrder || 9999);
+      return so;
+    });
+    return entry;
+  }
+
   function loadHistory() {
-    return readJson(STORAGE_KEYS.history, []);
+    var history = readJson(STORAGE_KEYS.history, null);
+    if (!Array.isArray(history)) {
+      history = [];
+      LEGACY_HISTORY_KEYS.some(function (key) {
+        if (key === STORAGE_KEYS.history) return false;
+        var legacy = readJson(key, null);
+        if (Array.isArray(legacy) && legacy.length) {
+          history = legacy;
+          return true;
+        }
+        return false;
+      });
+    }
+    history = history.map(migrateHistoryEntry);
+    saveHistory(history);
+    return history;
   }
 
   function saveHistory(history) {
-    writeJson(STORAGE_KEYS.history, history);
+    writeJson(STORAGE_KEYS.history, Array.isArray(history) ? history : []);
   }
 
   function saveActiveSession(session) {
@@ -651,7 +690,7 @@
 
   function formatSetLogLine(log) {
     if (!log) return '';
-    var label = 'SET ' + (log.setNumber || '?') + ' – ';
+    var label = 'SET ' + (log.setNumber || '?') + ' — ';
     if (log.resistanceType === 'band' || log.resistanceType === 'bodyweight') return label + 'Band';
     return label + (log.resistance != null ? log.resistance : 0) + ' kg';
   }
@@ -676,12 +715,14 @@
     return rows;
   }
 
-  function createSessionExercise(exercise, role) {
+  function createSessionExercise(exercise, role, scheduledOrder) {
     var snap = snapshotExercise(exercise);
     return {
       exerciseId: snap.id,
       snapshot: snap,
       role: role === 'supplemental' ? 'supplemental' : 'scheduled',
+      scheduledOrder: role === 'supplemental' ? null : (scheduledOrder != null ? scheduledOrder : null),
+      actualOrder: null,
       plannedSets: snap.sets,
       plannedReps: snap.reps,
       plannedResistance: snap.resistance,
@@ -692,6 +733,81 @@
       setLogs: createSetLogs(snap),
       completionStatus: 'pending'
     };
+  }
+
+  function ensureSessionExerciseShape(item, index) {
+    if (!item || typeof item !== 'object') return item;
+    ensureSetLogs(item);
+    if (item.role !== 'supplemental' && item.scheduledOrder == null) {
+      item.scheduledOrder = index + 1;
+    }
+    return item;
+  }
+
+  function getNextActualOrder(session) {
+    var max = 0;
+    (session.exercises || []).forEach(function (item) {
+      if (item.actualOrder != null && item.actualOrder > max) max = item.actualOrder;
+    });
+    return max + 1;
+  }
+
+  function assignActualOrder(session, item) {
+    if (!session || !item || item.actualOrder != null) return;
+    item.actualOrder = getNextActualOrder(session);
+  }
+
+  function findNextDefaultExerciseIndex(session) {
+    var scheduled = findIncompleteScheduledIndex(session);
+    if (scheduled >= 0) return scheduled;
+    var i;
+    for (i = 0; i < (session.exercises || []).length; i += 1) {
+      if (session.exercises[i].completionStatus !== 'completed') return i;
+    }
+    return -1;
+  }
+
+  function findIncompleteScheduledIndex(session) {
+    var best = -1;
+    var bestOrder = Infinity;
+    (session.exercises || []).forEach(function (item, index) {
+      if (item.role === 'supplemental') return;
+      if (item.completionStatus === 'completed') return;
+      var order = item.scheduledOrder != null ? item.scheduledOrder : index + 1;
+      if (order < bestOrder) {
+        bestOrder = order;
+        best = index;
+      }
+    });
+    return best;
+  }
+
+  function hasIncompleteExercises(session) {
+    return (session.exercises || []).some(function (item) {
+      return item.completionStatus !== 'completed';
+    });
+  }
+
+  function findSessionExerciseIndex(session, exercise) {
+    if (!session || !exercise) return -1;
+    var id = exercise.id;
+    var key = exerciseIdentityKey(exercise);
+    var i;
+    for (i = 0; i < (session.exercises || []).length; i += 1) {
+      var item = session.exercises[i];
+      var snap = item.snapshot || {};
+      if (snap.id === id || exerciseIdentityKey(snap) === key) return i;
+    }
+    return -1;
+  }
+
+  function sortExercisesByActualOrder(exercises) {
+    return (exercises || []).slice().sort(function (a, b) {
+      var ao = a.actualOrder != null ? a.actualOrder : 9999;
+      var bo = b.actualOrder != null ? b.actualOrder : 9999;
+      if (ao !== bo) return ao - bo;
+      return (a.scheduledOrder || 9999) - (b.scheduledOrder || 9999);
+    });
   }
 
   function todayKey() {
@@ -780,8 +896,13 @@
       restKind: null,
       restEndTime: null,
       restRemaining: 0,
-      exercises: exercises.map(function (exercise) {
-        return createSessionExercise(exercise, options.roleFor && options.roleFor(exercise) || role);
+      actualOrderCounter: 0,
+      exercises: exercises.map(function (exercise, index) {
+        return createSessionExercise(
+          exercise,
+          options.roleFor && options.roleFor(exercise) || role,
+          index + 1
+        );
       })
     };
   }
@@ -789,6 +910,13 @@
   function finalizeHistoryEntry(session) {
     var end = session.endTime ? new Date(session.endTime).getTime() : Date.now();
     var start = new Date(session.startTime).getTime();
+    var exercises = (session.exercises || []).map(function (item, index) {
+      var next = clone(ensureSessionExerciseShape(item, index));
+      if (next.completionStatus === 'completed' && next.actualOrder == null) {
+        assignActualOrder(session, next);
+      }
+      return next;
+    });
     return {
       id: session.id,
       date: session.date,
@@ -799,9 +927,7 @@
       endTime: session.endTime,
       estimatedDuration: session.estimatedDuration,
       actualDuration: Math.max(0, Math.round((end - start) / 1000)),
-      exercises: (session.exercises || []).map(function (item) {
-        return clone(ensureSetLogs(item));
-      })
+      exercises: sortExercisesByActualOrder(exercises)
     };
   }
 
@@ -902,8 +1028,8 @@
   function migrateActiveSessionShape(session) {
     if (!session || !Array.isArray(session.exercises)) return session;
     if (!session.sessionKind) session.sessionKind = session.workoutId === 'library' ? 'library' : 'schedule';
-    session.exercises = session.exercises.map(function (item) {
-      return ensureSetLogs(item);
+    session.exercises = session.exercises.map(function (item, index) {
+      return ensureSessionExerciseShape(item, index);
     });
     return session;
   }
@@ -950,6 +1076,13 @@
     formatClockDuration: formatClockDuration,
     snapshotExercise: snapshotExercise,
     createSessionExercise: createSessionExercise,
+    ensureSessionExerciseShape: ensureSessionExerciseShape,
+    assignActualOrder: assignActualOrder,
+    findIncompleteScheduledIndex: findIncompleteScheduledIndex,
+    findNextDefaultExerciseIndex: findNextDefaultExerciseIndex,
+    hasIncompleteExercises: hasIncompleteExercises,
+    findSessionExerciseIndex: findSessionExerciseIndex,
+    sortExercisesByActualOrder: sortExercisesByActualOrder,
     createWorkoutSession: createWorkoutSession,
     finalizeHistoryEntry: finalizeHistoryEntry,
     createSetLogs: createSetLogs,

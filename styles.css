@@ -20,7 +20,7 @@
 /* Welcome screen */
 .welcome-screen{position:fixed;inset:0;z-index:50;display:flex;align-items:stretch;justify-content:center;overflow:hidden;background:#1a1714}
 .welcome-screen[hidden]{display:none !important}
-.welcome-bg{position:absolute;inset:0;background-position:center center;background-size:cover;background-repeat:no-repeat;transform:scale(1.02)}
+.welcome-bg{position:absolute;inset:0;background-position:center 20%;background-size:cover;background-repeat:no-repeat}
 .welcome-overlay{position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,16,14,.42) 0%,rgba(20,16,14,.28) 38%,rgba(20,16,14,.62) 72%,rgba(20,16,14,.82) 100%)}
 .welcome-content{position:relative;z-index:1;width:100%;max-width:480px;margin:0 auto;padding:calc(28px + env(safe-area-inset-top,0px)) 24px calc(28px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;justify-content:flex-end;min-height:100%;min-height:100dvh;box-sizing:border-box;text-align:center;color:#fff}
 .welcome-kicker{margin:0 0 14px;font-size:15px;letter-spacing:.04em;font-weight:600;color:rgba(255,255,255,.88)}
@@ -28,8 +28,8 @@
 .welcome-tagline{margin:0 auto 28px;max-width:20em;font-size:22px;line-height:1.35;font-weight:700;text-wrap:balance}
 .welcome-actions{display:grid;gap:12px;width:100%}
 .welcome-btn{width:100%;border:0;border-radius:18px;padding:17px 18px;font-size:18px;font-weight:800;min-height:56px;cursor:pointer}
-.welcome-btn-primary{background:#fff;color:#222}
-.welcome-btn-secondary{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.welcome-btn-primary{background:#f5f0ea;color:#5c4a3a;box-shadow:0 2px 12px rgba(92,74,58,.12)}
+.welcome-btn-secondary{background:rgba(255,255,255,.88);color:#6b5748;border:1px solid rgba(255,255,255,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 .welcome-quote{margin:22px 0 0;font-size:13px;line-height:1.4;color:rgba(255,255,255,.72);font-weight:500}
 
 .app-home[hidden],.library-screen[hidden]{display:none !important}
@@ -44,7 +44,7 @@
 .list-hint{color:#777;font-size:13px;line-height:1.4;margin:0 0 10px}
 .order-btns{display:flex;flex-direction:column;gap:6px;margin-left:4px}
 .order-btns button{border:0;background:#f0eee9;border-radius:10px;width:40px;height:40px;font-size:16px;font-weight:800;cursor:pointer}
-.set-resistance-area{margin:4px 0 14px}.set-resistance-label{font-size:14px;color:#777;font-weight:700;margin-bottom:8px}.resistance-chip{display:inline-flex;align-items:center;justify-content:center;border:0;background:#222;color:#fff;border-radius:999px;padding:10px 16px;font-size:15px;font-weight:800;min-height:40px;width:auto;max-width:100%;cursor:pointer}.resistance-chip:active{transform:scale(.98)}.set-resistance-editor{margin-top:10px;max-width:260px}.set-resistance-editor[hidden]{display:none !important}.set-resistance-row{display:inline-flex;gap:8px;align-items:stretch;width:fit-content;max-width:260px}.set-resistance-row input,.set-resistance-row select{flex:0 0 auto;box-sizing:border-box;border:1px solid #ddd;border-radius:12px;padding:0 12px;font-size:16px;background:#fff;min-height:54px;height:54px;line-height:1.2}.set-resistance-row input{width:5.5ch;min-width:72px;max-width:88px;text-align:center;font-weight:700}.set-resistance-row select{width:auto;min-width:92px;max-width:132px;padding-right:28px}.set-resistance-hint{margin:8px 0 0;max-width:260px;font-size:12px;color:#888;line-height:1.35}.resistance-done-btn{margin-top:10px;width:auto;min-width:96px;max-width:160px;padding-left:18px;padding-right:18px}
+.set-resistance-area{margin:4px 0 14px}.set-resistance-label{font-size:14px;color:#777;font-weight:700;margin-bottom:8px}.set-resistance-row{display:inline-flex;gap:8px;align-items:stretch;width:fit-content;max-width:260px;margin-bottom:8px}.set-resistance-row input,.set-resistance-row select{flex:0 0 auto;box-sizing:border-box;border:1px solid #ddd;border-radius:12px;padding:0 12px;font-size:16px;background:#fff;min-height:48px;height:48px;line-height:1.2}.set-resistance-row input{width:5.5ch;min-width:72px;max-width:88px;text-align:center;font-weight:700}.set-resistance-row select{width:auto;min-width:92px;max-width:132px;padding-right:28px}
 .history-group-title{font-size:16px;font-weight:800;margin:18px 0 8px;color:#222}
 .set-log-line{font-size:14px;color:#444;margin-top:4px}
 .library-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}

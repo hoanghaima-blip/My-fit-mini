@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
-<meta name="myfit-version" content="14">
+<meta name="myfit-version" content="15">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=14">
-<link rel="icon" href="assets/icon-192.png?v=14">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
+<link rel="icon" href="assets/icon-192.png?v=15">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=15">
 <title>My Fit Mini</title>
 <script>
 /* Force one-time PWA cache refresh when UI version changes.
    Preserves workout/history localStorage and IndexedDB image data. */
 (function () {
-  var EXPECTED = '14';
+  var EXPECTED = '15';
   var VERSION_KEY = 'myfit-ui-version';
-  var RELOAD_KEY = 'myfit-ui-reload-v14';
+  var RELOAD_KEY = 'myfit-ui-reload-v15';
   try {
     var current = localStorage.getItem(VERSION_KEY);
     if (current === EXPECTED) return;
@@ -54,7 +54,7 @@
   <div class="welcome-overlay"></div>
   <div class="welcome-content">
     <p class="welcome-kicker">Chào mừng bạn đến với</p>
-    <img class="welcome-logo" src="assets/logo-header.png?v=14" alt="My Fit Mini">
+    <img class="welcome-logo" src="assets/logo-header.png?v=15" alt="My Fit Mini">
     <p class="welcome-tagline">Thức dậy và trở thành phiên bản mà chính bạn yêu thích nhất !</p>
     <div class="welcome-actions">
       <button type="button" class="welcome-btn welcome-btn-primary" id="welcome-schedule-btn">Tập theo lịch cố định</button>
@@ -66,10 +66,10 @@
 
 <main class="wrap app-home" id="app-home" hidden>
 <div class="home-top">
-  <button type="button" class="home-back" id="home-back-btn" aria-label="Quay về trang chủ">← Trang chủ</button>
+  <button type="button" class="home-back" id="home-back-btn" aria-label="Quay lại">← Quay lại</button>
 </div>
 <div class="brand">
-  <img class="brand-logo" src="assets/logo-header.png?v=14" alt="My Fit Mini">
+  <img class="brand-logo" src="assets/logo-header.png?v=15" alt="My Fit Mini">
 </div>
 <h1 class="title">Lịch tập của bạn</h1>
 
@@ -100,7 +100,6 @@
 
 <div class="section">Bài tập</div>
 <div class="list-toolbar">
-  <button type="button" class="btn-secondary list-toolbar-btn" id="add-to-session-btn">+ Thêm bài tập vào buổi đang tập</button>
   <button type="button" class="btn-secondary list-toolbar-btn" id="save-order-default-btn">Lưu thứ tự làm mặc định</button>
 </div>
 <p class="list-hint">Dùng ↑ ↓ để đổi thứ tự cho hôm nay. “Lưu thứ tự làm mặc định” mới ghi vào buổi T2/T4/T6.</p>
@@ -122,7 +121,7 @@
   <div class="wrap library-inner">
     <button type="button" class="library-back" id="library-back-btn">← Quay lại</button>
     <div class="brand">
-      <img class="brand-logo" src="assets/logo-header.png?v=14" alt="My Fit Mini">
+      <img class="brand-logo" src="assets/logo-header.png?v=15" alt="My Fit Mini">
     </div>
     <h1 class="title">Tập theo bài</h1>
     <p class="library-intro">Thư viện bài tập lẻ / bổ trợ. Đây không phải lịch tập cố định T2–T4–T6.</p>
@@ -286,26 +285,21 @@
       <div id="wreps-display" class="reps-display"></div>
       <div class="set-resistance-area">
         <div class="set-resistance-label">Mức tạ</div>
-        <button type="button" class="resistance-chip" id="w-resistance-chip" aria-label="Chỉnh mức tạ SET này">—</button>
-        <button type="button" class="resistance-history-btn" id="w-resistance-history-btn">Lịch sử tạ</button>
-        <div class="set-resistance-editor" id="w-resistance-editor" hidden>
-          <div class="set-resistance-row">
-            <input id="w-set-resistance" type="number" min="0" step="0.5" inputmode="decimal" tabindex="-1" aria-label="Mức tạ">
-            <select id="w-set-resistance-type" tabindex="-1" aria-label="Đơn vị">
-              <option value="kg">kg</option>
-              <option value="band">Band</option>
-            </select>
-          </div>
-          <p class="set-resistance-hint">Chỉ đổi SET hiện tại. Không đổi mức mặc định của bài.</p>
-          <button type="button" class="btn-secondary resistance-done-btn" id="w-resistance-done-btn">Xong</button>
+        <div class="set-resistance-row">
+          <input id="w-set-resistance" type="number" min="0" step="0.5" inputmode="decimal" tabindex="-1" aria-label="Mức tạ">
+          <select id="w-set-resistance-type" tabindex="-1" aria-label="Đơn vị">
+            <option value="kg">kg</option>
+            <option value="band">Band</option>
+          </select>
         </div>
+        <button type="button" class="resistance-history-btn" id="w-resistance-history-btn">↻ Lịch sử tạ</button>
       </div>
       <div id="wset" class="note"></div>
     </div>
     <div class="workout-actions" id="workout-actions">
       <button type="button" class="complete" id="complete-set-btn">Hoàn thành SET</button>
       <button type="button" class="btn-secondary" id="complete-exercise-btn">Hoàn thành bài tập</button>
-      <button type="button" class="btn-secondary workout-pick-btn" id="workout-pick-exercise-btn" hidden>+ Chọn bài</button>
+      <button type="button" class="btn-secondary workout-pick-btn" id="workout-pick-exercise-btn">+ Chọn bài</button>
     </div>
   </div>
 </div>
@@ -338,8 +332,8 @@
   </div>
 </div>
 
-<script src="data.js?v=14"></script>
-<script src="images.js?v=14"></script>
-<script src="app.js?v=14"></script>
+<script src="data.js?v=15"></script>
+<script src="images.js?v=15"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>

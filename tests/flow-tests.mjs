@@ -601,7 +601,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="14"'), 'version meta is 14');
+    assert(html.includes('myfit-version" content="15"'), 'version meta is 15');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
@@ -613,8 +613,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v14'), 'service worker cache v14');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v14 + workout management');
+    assert(sw.includes('my-fit-mini-v15'), 'service worker cache v15');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v15 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -748,13 +748,15 @@ async function run() {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
     assert(html.includes('home-back-btn'), 'back home button markup');
     assert(html.includes('add-exercise-form'), 'add exercise form markup');
-    assert(html.includes('w-resistance-chip'), 'optional resistance chip markup');
-    assert(html.includes('w-resistance-editor'), 'resistance editor markup');
-    assert(html.includes('w-set-resistance'), 'per-set resistance input inside editor');
+    assert(html.includes('w-set-resistance'), 'per-set resistance input markup');
+    assert(html.includes('w-set-resistance-type'), 'per-set resistance unit select');
+    assert(html.includes('w-resistance-history-btn'), 'resistance history button');
+    assert(html.includes('↻ Lịch sử tạ'), 'resistance history label');
     assert(html.includes('workout-actions'), 'sticky workout actions bar');
     assert(html.includes('complete-set-btn'), 'complete set primary action');
+    assert(html.includes('workout-pick-exercise-btn'), 'pick exercise button');
     assert(html.includes('library-add-btn'), 'library add button');
-    assert(/w-resistance-editor[^>]*\bhidden\b/.test(html) || html.includes('id="w-resistance-editor" hidden'), 'resistance editor starts hidden');
+    assert(!html.includes('add-to-session-btn'), 'schedule add-to-session removed');
 
     pass('TEST 21: order + per-set logs + supplemental + library');
     first.dom.window.close();
@@ -770,18 +772,16 @@ async function run() {
     const app = window.MyFitApp;
     const doc = window.document;
 
-    const chip = doc.getElementById('w-resistance-chip');
-    const editor = doc.getElementById('w-resistance-editor');
+    const resistanceInput = doc.getElementById('w-set-resistance');
+    const resistanceType = doc.getElementById('w-set-resistance-type');
     const actions = doc.getElementById('workout-actions');
     const completeBtn = doc.getElementById('complete-set-btn');
-    assert(chip && editor && actions && completeBtn, 'workout resistance + action markup present');
-    assert(editor.hidden, 'editor hidden before workout');
+    assert(resistanceInput && resistanceType && actions && completeBtn, 'workout resistance + action markup present');
 
     app.startWorkout(0);
     let session = app.getActiveSession();
     assert(session.exercises[0].setLogs[0].resistance === 5, 'set1 starts at default 5');
-    assert(editor.hidden, 'editor stays closed on enter workout');
-    assert(chip.textContent.includes('5'), 'chip shows default load');
+    assert(resistanceInput.value === '5', 'resistance input shows default load');
     assert(completeBtn.textContent === 'Hoàn thành SET', 'primary CTA is Hoàn thành SET');
     assert(actions.querySelector('#complete-set-btn'), 'primary action inside sticky bar');
 
@@ -795,15 +795,10 @@ async function run() {
     session = app.getActiveSession();
     assert(session.currentSet === 2, 'advanced to set 2');
     assert(session.exercises[0].setLogs[1].resistance === 5, 'set2 inherits set1 load');
-    assert(editor.hidden, 'editor closed on set 2 view');
 
-    // Edit SET 2 via chip → input → Xong
-    chip.click();
-    assert(!editor.hidden, 'editor opens after chip tap');
-    doc.getElementById('w-set-resistance').value = '12';
-    doc.getElementById('w-set-resistance').dispatchEvent(new window.Event('change'));
-    doc.getElementById('w-resistance-done-btn').click();
-    assert(editor.hidden, 'editor closes after Xong');
+    // Edit SET 2 via visible inputs
+    resistanceInput.value = '12';
+    resistanceInput.dispatchEvent(new window.Event('change'));
     session = app.getActiveSession();
     assert(session.exercises[0].setLogs[1].resistance === 12, 'set2 edited to 12');
     assert(session.exercises[0].snapshot.resistance === 5, 'exercise default still 5 after edit');
@@ -819,12 +814,12 @@ async function run() {
     assert(session.phase === 'rest-exercise', 'exercise rest after last set');
     app.finishRestAdvance();
     session = app.getActiveSession();
-    assert(session.currentExerciseIndex === 1, 'moved to exercise 2');
+    assert(session.currentExerciseIndex === 1, 'moved to exercise 2 by schedule order');
     assert(session.currentSet === 1, 'exercise 2 starts at set 1');
     assert(doc.getElementById('wprog').textContent.includes('Bài 2/'), 'UI shows Bài 2');
     assert(completeBtn.offsetParent !== null || completeBtn.isConnected, 'complete button still in DOM');
 
-    pass('TEST 22: optional resistance chip + sticky complete flow');
+    pass('TEST 22: optional resistance row + sticky complete flow');
     dom.window.close();
   } catch (err) {
     fail('TEST 22', err);
@@ -859,6 +854,11 @@ async function run() {
       assert(doc.getElementById('workout-actions'), 'actions bar for ex ' + (idx + 1));
       const snap = session.exercises[idx].snapshot;
       session.currentSet = snap.sets;
+      if (idx === workout.exercises.length - 1) {
+        session.exercises.forEach(function (item, i) {
+          if (i !== idx) item.completionStatus = 'completed';
+        });
+      }
       app.showWorkoutView();
       const label = doc.getElementById('complete-set-btn').textContent;
       if (idx === workout.exercises.length - 1) {
@@ -1125,6 +1125,67 @@ async function run() {
     histApp.dom.window.close();
   } catch (err) {
     fail('TEST 26', err);
+  }
+
+  try {
+    resetStorage();
+    const first = loadApp();
+    const D = first.window.MyFitData;
+    const app = first.window.MyFitApp;
+    app.setActiveSession(null);
+    app.selectWorkout('a');
+    app.startWorkout(0);
+    let session = app.getActiveSession();
+    assert(session.exercises.length >= 3, 'schedule has at least 3 exercises');
+    // Complete exercise 1
+    session.exercises[0].completionStatus = 'completed';
+    D.assignActualOrder(session, session.exercises[0]);
+    session.currentExerciseIndex = 0;
+    session.phase = 'rest-exercise';
+    // Pick exercise 3 (index 2)
+    const ex3 = D.clone(session.exercises[2].snapshot);
+    ex3.id = session.exercises[2].snapshot.id;
+    app.pickExerciseForSession(ex3, { jumpNow: true });
+    session = app.getActiveSession();
+    assert(session.currentExerciseIndex === 2, 'jumped to exercise 3');
+    session.exercises[2].completionStatus = 'completed';
+    D.assignActualOrder(session, session.exercises[2]);
+    session.phase = 'rest-exercise';
+    app.finishRestAdvance();
+    session = app.getActiveSession();
+    assert(session.currentExerciseIndex === 1, 'next default is exercise 2');
+    assert(session.exercises[1].completionStatus !== 'completed', 'exercise 2 still pending');
+
+    // Finish workout and verify history persistence after reload
+    session.exercises.forEach(function (item, idx) {
+      if (!item) return;
+      item.completionStatus = 'completed';
+      D.assignActualOrder(session, item);
+    });
+    session.endTime = new Date().toISOString();
+    session.phase = 'complete';
+    const entry = D.finalizeHistoryEntry(session);
+    assert(entry.exercises.some(function (item) { return item.actualOrder === 1; }), 'history has actualOrder');
+    const history = D.loadHistory();
+    history.unshift(entry);
+    D.saveActiveSession(null);
+    D.saveHistory(history);
+    first.dom.window.close();
+
+    const second = loadApp();
+    const hist2 = second.window.MyFitData.loadHistory();
+    assert(hist2.length === 1, 'history persists after reload');
+    assert(hist2[0].exercises.length === entry.exercises.length, 'history entry intact with all exercises');
+    second.dom.window.close();
+
+    const css = readFileSync(join(root, 'styles.css'), 'utf8');
+    assert(css.includes('welcome-btn-primary'), 'welcome primary button style');
+    assert(css.includes('#f5f0ea') || css.includes('#5c4a3a'), 'welcome uses light brown palette');
+    assert(!css.includes('welcome-btn-primary{background:#fff;color:#222}'), 'welcome primary is not black/white');
+
+    pass('TEST 27: reorder navigation + history persistence + welcome palette');
+  } catch (err) {
+    fail('TEST 27', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

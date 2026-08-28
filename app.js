@@ -48,9 +48,6 @@
     wrepsDisplay: document.getElementById('wreps-display'),
     wSetResistance: document.getElementById('w-set-resistance'),
     wSetResistanceType: document.getElementById('w-set-resistance-type'),
-    wResistanceChip: document.getElementById('w-resistance-chip'),
-    wResistanceEditor: document.getElementById('w-resistance-editor'),
-    wResistanceDoneBtn: document.getElementById('w-resistance-done-btn'),
     restOverlay: document.getElementById('rest-overlay'),
     restLabel: document.getElementById('rest-label'),
     restTimer: document.getElementById('rest-timer'),
@@ -317,7 +314,12 @@
       '<div class="history-row"><span>Sets planned / actual</span><strong>' + summary.plannedSets + ' / ' + summary.actualSets + '</strong></div>' +
       '<div class="history-detail-list">';
 
-    (entry.exercises || []).forEach(function (item, globalIndex) {
+    (entry.exercises || []).slice().sort(function (a, b) {
+      var ao = a.actualOrder != null ? a.actualOrder : 9999;
+      var bo = b.actualOrder != null ? b.actualOrder : 9999;
+      if (ao !== bo) return ao - bo;
+      return (a.scheduledOrder || 9999) - (b.scheduledOrder || 9999);
+    }).forEach(function (item, globalIndex) {
       var snap = item.snapshot || {};
       var status = item.completionStatus || 'pending';
       var roleBadge = item.role === 'supplemental' ? ' · Bổ sung' : '';
@@ -848,6 +850,50 @@
     }).join('');
   }
 
+  function jumpToExerciseIndex(index, options) {
+    options = options || {};
+    if (!activeSession || index < 0 || index >= activeSession.exercises.length) return;
+    clearRestTimer();
+    hideOverlay(els.restOverlay);
+    var target = activeSession.exercises[index];
+    D.ensureSetLogs(target);
+    var nextSet = Math.max(1, (target.actualSetsCompleted || 0) + 1);
+    if (nextSet > target.snapshot.sets) nextSet = 1;
+    activeSession.currentExerciseIndex = index;
+    activeSession.currentSet = nextSet;
+    activeSession.phase = 'exercise';
+    activeSession.restEndTime = null;
+    activeSession.restRemaining = 0;
+    activeSession.restKind = null;
+    persistSession();
+    if (options.show !== false) showWorkoutView();
+  }
+
+  function pickExerciseForSession(exercise, options) {
+    options = options || {};
+    var jumpNow = options.jumpNow != null ? options.jumpNow : pickJumpAfterInsert;
+    if (!exercise) return;
+    if (!activeSession || activeSession.phase === 'complete') {
+      var workout = getWorkout(currentWorkoutId);
+      if (!workout) return;
+      resumePromptShown = true;
+      activeSession = D.createWorkoutSession(workout);
+      jumpNow = true;
+    }
+    var existingIdx = D.findSessionExerciseIndex(activeSession, exercise);
+    if (existingIdx >= 0) {
+      var existing = activeSession.exercises[existingIdx];
+      if (existing.completionStatus !== 'completed') {
+        closePickExercise();
+        if (jumpNow) jumpToExerciseIndex(existingIdx);
+        else persistSession();
+        renderAll();
+        return;
+      }
+    }
+    insertSupplementalExercise(exercise, { jumpNow: jumpNow });
+  }
+
   function insertSupplementalExercise(exercise, options) {
     options = options || {};
     var jumpNow = options.jumpNow != null ? options.jumpNow : pickJumpAfterInsert;
@@ -867,16 +913,7 @@
     persistSession();
     closePickExercise();
     if (jumpNow) {
-      clearRestTimer();
-      hideOverlay(els.restOverlay);
-      activeSession.currentExerciseIndex = insertAt;
-      activeSession.currentSet = 1;
-      activeSession.phase = 'exercise';
-      activeSession.restEndTime = null;
-      activeSession.restRemaining = 0;
-      activeSession.restKind = null;
-      persistSession();
-      showWorkoutView();
+      jumpToExerciseIndex(insertAt);
     } else if (els.workoutOverlay && els.workoutOverlay.style.display === 'flex') {
       showWorkoutView();
     }
@@ -884,7 +921,7 @@
   }
 
   function addExerciseToActiveSession(exercise, options) {
-    insertSupplementalExercise(exercise, options);
+    pickExerciseForSession(exercise, options);
   }
 
   function clearRestTimer() {
@@ -913,7 +950,13 @@
 
   function updateWorkoutPickButton() {
     if (!els.workoutPickBtn || !activeSession) return;
-    els.workoutPickBtn.hidden = activeSession.phase !== 'exercise';
+    els.workoutPickBtn.hidden = activeSession.phase !== 'exercise' && activeSession.phase !== 'rest-exercise';
+  }
+
+  function hasOtherIncompleteExercises(session, currentIndex) {
+    return (session.exercises || []).some(function (item, index) {
+      return index !== currentIndex && item.completionStatus !== 'completed';
+    });
   }
 
   function openResistanceHistory() {
@@ -922,7 +965,7 @@
     var snap = current.snapshot || {};
     var rows = D.getExerciseLoadHistory(snap.id, D.exerciseIdentityKey(snap));
     if (els.resistanceHistoryTitle) {
-      els.resistanceHistoryTitle.textContent = 'Lịch sử tạ · ' + (snap.name || '');
+      els.resistanceHistoryTitle.textContent = 'LỊCH SỬ TẠ · ' + (snap.name || '');
     }
     if (!els.resistanceHistoryContent) return;
     if (!rows.length) {
@@ -976,15 +1019,13 @@
       return;
     }
     if (activeSession.phase === 'rest-exercise') {
-      if (activeSession.currentExerciseIndex >= activeSession.exercises.length - 1) {
+      var nextIdx = D.findNextDefaultExerciseIndex(activeSession);
+      if (nextIdx < 0) {
         finishWorkout();
         return;
       }
-      activeSession.currentExerciseIndex += 1;
-      activeSession.currentSet = 1;
-      activeSession.phase = 'exercise';
-      persistSession();
-      showWorkoutView();
+      jumpToExerciseIndex(nextIdx);
+      return;
     }
   }
 
@@ -1024,50 +1065,6 @@
     return false;
   }
 
-  function formatResistanceChip(log) {
-    return D.formatResistance({
-      resistance: log && log.resistance != null ? log.resistance : 0,
-      resistanceType: (log && log.resistanceType) || 'kg'
-    });
-  }
-
-  function isResistanceEditorOpen() {
-    return !!(els.wResistanceEditor && !els.wResistanceEditor.hidden);
-  }
-
-  function closeResistanceEditor(options) {
-    options = options || {};
-    if (isResistanceEditorOpen() && options.sync !== false) {
-      syncUiResistanceIntoSession();
-      persistSession();
-    }
-    if (els.wResistanceEditor) els.wResistanceEditor.hidden = true;
-    if (els.wSetResistance) els.wSetResistance.blur();
-    if (els.wSetResistanceType) els.wSetResistanceType.blur();
-    updateResistanceChipLabel();
-  }
-
-  function openResistanceEditor() {
-    var current = getCurrentExercise();
-    if (!current || !activeSession) return;
-    D.ensureSetLogs(current);
-    var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
-    var log = current.setLogs[setIndex] || current.setLogs[0];
-    writeCurrentSetResistanceToUi(log);
-    if (els.wResistanceEditor) els.wResistanceEditor.hidden = false;
-    // Do not autofocus — optional edit only.
-  }
-
-  function updateResistanceChipLabel() {
-    if (!els.wResistanceChip || !activeSession) return;
-    var current = getCurrentExercise();
-    if (!current) return;
-    D.ensureSetLogs(current);
-    var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
-    var log = current.setLogs[setIndex] || current.setLogs[0];
-    els.wResistanceChip.textContent = formatResistanceChip(log);
-  }
-
   function readCurrentSetResistanceFromUi() {
     if (!els.wSetResistance) return null;
     return {
@@ -1086,16 +1083,11 @@
       if (uiType === 'bodyweight') uiType = 'band';
       els.wSetResistanceType.value = uiType;
     }
-    if (els.wResistanceChip) {
-      els.wResistanceChip.textContent = formatResistanceChip(log);
-    }
   }
 
   function syncUiResistanceIntoSession() {
     var current = getCurrentExercise();
     if (!current || !activeSession) return;
-    // Only apply editor values when editor is open (user chose to edit).
-    if (!isResistanceEditorOpen()) return;
     D.ensureSetLogs(current);
     var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
     if (!current.setLogs[setIndex]) return;
@@ -1112,8 +1104,8 @@
     if (!current) return;
     var plannedSets = current.snapshot.sets;
     var isLastSet = activeSession.currentSet >= plannedSets;
-    var isLastExercise = activeSession.currentExerciseIndex >= activeSession.exercises.length - 1;
-    if (isLastSet && isLastExercise) {
+    var otherIncomplete = hasOtherIncompleteExercises(activeSession, activeSession.currentExerciseIndex);
+    if (isLastSet && !otherIncomplete) {
       btn.textContent = 'Hoàn thành buổi tập';
     } else if (isLastSet) {
       btn.textContent = 'Bài tiếp theo';
@@ -1141,7 +1133,6 @@
     els.wset.textContent = [snap.instructions, snap.notes].filter(Boolean).join('\n\n');
     els.wsetDisplay.textContent = 'SET ' + activeSession.currentSet + ' / ' + snap.sets;
     els.wrepsDisplay.textContent = snap.reps + ' REPS';
-    if (els.wResistanceEditor) els.wResistanceEditor.hidden = true;
     writeCurrentSetResistanceToUi(log);
     updatePrimaryActionLabel();
     updateWorkoutPickButton();
@@ -1174,10 +1165,7 @@
     var current = getCurrentExercise();
     if (!current || !activeSession) return;
     D.ensureSetLogs(current);
-    if (isResistanceEditorOpen()) {
-      syncUiResistanceIntoSession();
-      closeResistanceEditor({ sync: false });
-    }
+    syncUiResistanceIntoSession();
     var setIndex = Math.max(0, (activeSession.currentSet || 1) - 1);
     var log = current.setLogs[setIndex];
     if (log) {
@@ -1206,13 +1194,15 @@
   function completeExercise(skipSetRest) {
     var current = getCurrentExercise();
     if (!current || !activeSession) return;
+    syncUiResistanceIntoSession();
     current.completionStatus = 'completed';
+    D.assignActualOrder(activeSession, current);
     persistSession();
     if (skipSetRest !== false) {
       clearRestTimer();
       hideOverlay(els.restOverlay);
     }
-    if (activeSession.currentExerciseIndex >= activeSession.exercises.length - 1) {
+    if (!D.hasIncompleteExercises(activeSession)) {
       finishWorkout();
       return;
     }
@@ -1315,11 +1305,7 @@
     if (saveOrderBtn) saveOrderBtn.addEventListener('click', saveDisplayedOrderAsDefault);
 
     var addToSessionBtn = document.getElementById('add-to-session-btn');
-    if (addToSessionBtn) {
-      addToSessionBtn.addEventListener('click', function () {
-        openPickExerciseForSession({ jumpAfterInsert: false });
-      });
-    }
+    if (addToSessionBtn) addToSessionBtn.style.display = 'none';
 
     els.list.addEventListener('click', function (event) {
       var target = event.target.closest('[data-action]');
@@ -1380,7 +1366,7 @@
         if (!btn) return;
         var exercise = library.exercises[parseInt(btn.dataset.pickIndex, 10)];
         if (!exercise) return;
-        if (pickMode === 'session') insertSupplementalExercise(exercise);
+        if (pickMode === 'session') pickExerciseForSession(exercise);
       });
     }
 
@@ -1393,33 +1379,15 @@
       });
     }
 
-    if (els.wResistanceChip) {
-      els.wResistanceChip.addEventListener('click', function () {
-        if (!activeSession || activeSession.phase === 'complete') return;
-        if (isResistanceEditorOpen()) {
-          closeResistanceEditor();
-          return;
-        }
-        openResistanceEditor();
-      });
-    }
-    if (els.wResistanceDoneBtn) {
-      els.wResistanceDoneBtn.addEventListener('click', function () {
-        closeResistanceEditor();
-        persistSession();
-      });
-    }
     if (els.wSetResistance) {
       els.wSetResistance.addEventListener('change', function () {
         syncUiResistanceIntoSession();
-        updateResistanceChipLabel();
         persistSession();
       });
     }
     if (els.wSetResistanceType) {
       els.wSetResistanceType.addEventListener('change', function () {
         syncUiResistanceIntoSession();
-        updateResistanceChipLabel();
         persistSession();
       });
     }
@@ -1434,7 +1402,7 @@
 
     document.getElementById('complete-set-btn').addEventListener('click', completeSet);
     document.getElementById('complete-exercise-btn').addEventListener('click', function () {
-      if (isResistanceEditorOpen()) closeResistanceEditor();
+      syncUiResistanceIntoSession();
       completeExercise(true);
     });
     document.getElementById('workout-close-btn').addEventListener('click', closeWorkout);
@@ -1535,6 +1503,8 @@
     saveDisplayedOrderAsDefault: saveDisplayedOrderAsDefault,
     addExerciseToActiveSession: addExerciseToActiveSession,
     insertSupplementalExercise: insertSupplementalExercise,
+    pickExerciseForSession: pickExerciseForSession,
+    jumpToExerciseIndex: jumpToExerciseIndex,
     openResistanceHistory: openResistanceHistory,
     startLibraryExercise: startLibraryExercise
   };

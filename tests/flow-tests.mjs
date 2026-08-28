@@ -601,7 +601,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="16"'), 'version meta is 16');
+    assert(html.includes('myfit-version" content="17"'), 'version meta is 17');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
     assert(html.includes('id="history-section"'), 'history-section in HTML');
     assert(html.includes('Lịch sử tập'), 'Lịch sử tập label in HTML');
@@ -613,10 +613,10 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v16'), 'service worker cache v16');
+    assert(sw.includes('my-fit-mini-v17'), 'service worker cache v17');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v16 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v17 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1183,7 +1183,9 @@ async function run() {
     const css = readFileSync(join(root, 'styles.css'), 'utf8');
     assert(css.includes('welcome-btn-primary'), 'welcome primary button style');
     assert(css.includes('#dccfc0') || css.includes('#5c4838'), 'welcome uses beige/brown palette');
-    assert(css.includes('background-size:78%'), 'welcome background zoomed out');
+    assert(css.includes('background-size:cover'), 'welcome background uses full-screen cover');
+    assert(css.includes('width:132%'), 'welcome background zoomed out via overscale cover');
+    assert(!css.includes('background:#e8dfd4'), 'no plain beige letterbox around welcome image');
     assert(!css.includes('welcome-btn-primary{background:#fff;color:#222}'), 'welcome primary is not black/white');
 
     pass('TEST 27: reorder navigation + history persistence + welcome palette');

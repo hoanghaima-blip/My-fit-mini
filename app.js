@@ -682,18 +682,6 @@
     return currentWorkoutId;
   }
 
-  function welcomeStartNow() {
-    selectTodayWorkout();
-    showHome();
-    if (activeSession && activeSession.phase !== 'complete') {
-      resumePromptShown = false;
-      showResumeBanner();
-      return;
-    }
-    resumePromptShown = true;
-    startWorkout(0);
-  }
-
   function welcomeOpenSchedule() {
     selectTodayWorkout();
     showHome();
@@ -1385,12 +1373,10 @@
     document.getElementById('resume-continue-btn').addEventListener('click', continueWorkout);
     document.getElementById('resume-discard-btn').addEventListener('click', discardWorkout);
 
-    var welcomeStartBtn = document.getElementById('welcome-start-btn');
     var welcomeScheduleBtn = document.getElementById('welcome-schedule-btn');
     var welcomeLibraryBtn = document.getElementById('welcome-library-btn');
     var libraryBackBtn = document.getElementById('library-back-btn');
     var libraryToScheduleBtn = document.getElementById('library-to-schedule-btn');
-    if (welcomeStartBtn) welcomeStartBtn.addEventListener('click', welcomeStartNow);
     if (welcomeScheduleBtn) welcomeScheduleBtn.addEventListener('click', welcomeOpenSchedule);
     if (welcomeLibraryBtn) welcomeLibraryBtn.addEventListener('click', welcomeOpenLibrary);
     if (libraryBackBtn) libraryBackBtn.addEventListener('click', showWelcome);
@@ -1462,7 +1448,6 @@
     showWelcome: showWelcome,
     showHome: showHome,
     showLibrary: showLibrary,
-    welcomeStartNow: welcomeStartNow,
     welcomeOpenSchedule: welcomeOpenSchedule,
     welcomeOpenLibrary: welcomeOpenLibrary,
     moveDisplayedExercise: moveDisplayedExercise,

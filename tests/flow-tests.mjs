@@ -579,9 +579,10 @@ async function run() {
     assert(!!library, 'library-screen exists');
     assert(!welcome.hidden, 'welcome visible on open');
     assert(home.hidden, 'home hidden on open');
-    assert(window.document.getElementById('welcome-start-btn'), 'start button');
+    assert(!window.document.getElementById('welcome-start-btn'), 'start button removed');
     assert(window.document.getElementById('welcome-schedule-btn'), 'schedule button');
     assert(window.document.getElementById('welcome-library-btn'), 'library button');
+    assert(window.document.getElementById('welcome-schedule-btn').textContent === 'Tập theo lịch cố định', 'schedule button label');
     assert(window.MyFitData.WELCOME_BACKGROUND_IMAGE.indexOf('welcome-background') >= 0, 'background constant');
     assert(window.MyFitData.REST_SET_SECONDS === 60, 'set rest still 60');
     assert(window.MyFitData.REST_EXERCISE_SECONDS === 90, 'exercise rest still 90');
@@ -608,7 +609,7 @@ async function run() {
     assert(html.includes('myfit-ui-version'), 'safe cache refresh gate present');
     assert(html.includes('assets/logo-header.png'), 'app logo in HTML');
     assert(html.includes('apple-touch-icon.png'), 'apple-touch-icon uses logo mau 6');
-    assert(html.includes('Bắt đầu ngay'), 'welcome primary CTA');
+    assert(html.includes('Tập theo lịch cố định'), 'welcome schedule CTA');
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
@@ -947,7 +948,8 @@ async function run() {
     editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await wait(100);
     const noImg = app.getWorkouts().b.exercises[0];
-    assert(noImg.instructions === 'No image ok', 'T4 saves without image');
+    assert(noImg.instructions === 'No image ok', 'T4 saves when URL field empty');
+    assert(editForm.checkValidity(), 'edit form stays valid without image URL');
 
     pass('TEST 24: T4 edit saves without changing image URL field');
     dom.window.close();

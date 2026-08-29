@@ -782,6 +782,7 @@
   }
 
   function startLibraryExercise(index) {
+    if (window.MyFitRestAudio) window.MyFitRestAudio.unlockRestAudio();
     var exercise = library.exercises[index];
     if (!exercise) return;
     if (activeSession && activeSession.phase !== 'complete') {
@@ -1321,12 +1322,22 @@
     var completeExerciseBtn = document.getElementById('complete-exercise-btn');
     var restSkipBtn = document.getElementById('rest-skip-btn');
     var restAddBtn = document.getElementById('rest-add-btn');
+    var restPickBtn = document.getElementById('rest-pick-exercise-btn');
     var resumeContinueBtn = document.getElementById('resume-continue-btn');
+    var startWorkoutBtn = document.getElementById('start-workout-btn');
+    var detailStartBtn = document.getElementById('detail-start-btn');
+    var welcomeScheduleBtn = document.getElementById('welcome-schedule-btn');
+    var welcomeLibraryBtn = document.getElementById('welcome-library-btn');
     if (completeSetBtn) completeSetBtn.addEventListener('click', unlock, true);
     if (completeExerciseBtn) completeExerciseBtn.addEventListener('click', unlock, true);
     if (restSkipBtn) restSkipBtn.addEventListener('click', unlock, true);
     if (restAddBtn) restAddBtn.addEventListener('click', unlock, true);
+    if (restPickBtn) restPickBtn.addEventListener('click', unlock, true);
     if (resumeContinueBtn) resumeContinueBtn.addEventListener('click', unlock, true);
+    if (startWorkoutBtn) startWorkoutBtn.addEventListener('click', unlock, true);
+    if (detailStartBtn) detailStartBtn.addEventListener('click', unlock, true);
+    if (welcomeScheduleBtn) welcomeScheduleBtn.addEventListener('click', unlock, true);
+    if (welcomeLibraryBtn) welcomeLibraryBtn.addEventListener('click', unlock, true);
   }
 
   function bindEvents() {

@@ -1629,7 +1629,7 @@ async function run() {
 
     pass('TEST 31: mergeExerciseMaster + sync preserve custom images');
   } catch (err) {
-    fail('TEST 30', err);
+    fail('TEST 31', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

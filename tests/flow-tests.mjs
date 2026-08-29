@@ -602,7 +602,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="28"'), 'version meta is 28');
+    assert(html.includes('myfit-version" content="29"'), 'version meta is 29');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -616,12 +616,13 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v28'), 'service worker cache v28');
+    assert(sw.includes('my-fit-mini-v29'), 'service worker cache v29');
+    assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v28 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v29 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1312,7 +1313,9 @@ async function run() {
     const spoken = [];
     const hooks = { speak: (text) => spoken.push(text) };
 
-    assert(!!RA, 'MyFitRestAudio module loaded');
+    assert(!!RA.unlockRestAudio, 'unlockRestAudio exported');
+    RA.unlockRestAudio();
+    assert(RA._isUnlocked(), 'audio unlock after user gesture hook');
     assert(!RA.shouldAnnounceCountdown(6), 'no audio above 5 seconds');
     assert(RA.shouldAnnounceCountdown(5), 'audio at 5 seconds');
 

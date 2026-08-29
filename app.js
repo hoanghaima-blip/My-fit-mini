@@ -1312,7 +1312,25 @@
     hideOverlay(els.restOverlay);
   }
 
+  function bindWorkoutAudioUnlock() {
+    if (!window.MyFitRestAudio || !window.MyFitRestAudio.unlockRestAudio) return;
+    var unlock = function () {
+      window.MyFitRestAudio.unlockRestAudio();
+    };
+    var completeSetBtn = document.getElementById('complete-set-btn');
+    var completeExerciseBtn = document.getElementById('complete-exercise-btn');
+    var restSkipBtn = document.getElementById('rest-skip-btn');
+    var restAddBtn = document.getElementById('rest-add-btn');
+    var resumeContinueBtn = document.getElementById('resume-continue-btn');
+    if (completeSetBtn) completeSetBtn.addEventListener('click', unlock, true);
+    if (completeExerciseBtn) completeExerciseBtn.addEventListener('click', unlock, true);
+    if (restSkipBtn) restSkipBtn.addEventListener('click', unlock, true);
+    if (restAddBtn) restAddBtn.addEventListener('click', unlock, true);
+    if (resumeContinueBtn) resumeContinueBtn.addEventListener('click', unlock, true);
+  }
+
   function bindEvents() {
+    bindWorkoutAudioUnlock();
     document.querySelectorAll('.tab').forEach(function (tab) {
       tab.addEventListener('click', function () {
         selectWorkout(tab.dataset.workoutId);

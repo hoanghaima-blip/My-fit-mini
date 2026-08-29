@@ -915,6 +915,13 @@
     return exercise.sets + ' × ' + reps + ' · ' + formatResistance(exercise);
   }
 
+  function formatResistanceTypeLabel(type) {
+    if (type === 'kg') return 'kg (tạ/máy)';
+    if (type === 'band') return 'Band / dây kháng lực';
+    if (type === 'bodyweight') return 'Bodyweight / tự trọng';
+    return type || '—';
+  }
+
   function estimateWorkoutSeconds(workout) {
     var total = 0;
     workout.exercises.forEach(function (exercise, index) {
@@ -1431,6 +1438,7 @@
     loadLastDay: loadLastDay,
     saveLastDay: saveLastDay,
     formatResistance: formatResistance,
+    formatResistanceTypeLabel: formatResistanceTypeLabel,
     formatExerciseMeta: formatExerciseMeta,
     estimateWorkoutSeconds: estimateWorkoutSeconds,
     formatDuration: formatDuration,

@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="39"'), 'version meta is 39');
-    assert(html.includes('data.js?v=39'), 'script cache bust v39');
+    assert(html.includes('myfit-version" content="40"'), 'version meta is 40');
+    assert(html.includes('data.js?v=40'), 'script cache bust v40');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v39'), 'service worker cache v39');
-    assert(sw.includes('APP_VERSION = \'39\''), 'service worker APP_VERSION v39');
+    assert(sw.includes('my-fit-mini-v40'), 'service worker cache v40');
+    assert(sw.includes('APP_VERSION = \'40\''), 'service worker APP_VERSION v40');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v39 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v40 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -636,11 +636,15 @@ async function run() {
     const edit = window.document.getElementById('edit-form');
     const replace = window.document.getElementById('replace-form');
     const add = window.document.getElementById('add-exercise-form');
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
     ['name', 'instructions', 'notes', 'tips', 'commonMistakes', 'image', 'sets', 'reps', 'resistance', 'resistanceType', 'imageFile', 'primaryMuscleGroup'].forEach((field) => {
       assert(!!edit.elements[field], 'edit has ' + field);
       assert(!!replace.elements[field], 'replace has ' + field);
       assert(!!add.elements[field], 'add has ' + field);
     });
+    assert(html.includes('id="dprimary-muscle"'), 'detail primary muscle row');
+    assert(html.includes('id="dsets"'), 'detail sets row');
+    assert(html.includes('id="detail-edit-btn"'), 'detail edit button for library');
     assert(add.querySelector('[data-role="instruction-gallery"]'), 'add form instruction gallery');
     assert(add.querySelector('[data-role="secondary-muscles"]'), 'add form secondary muscles');
     assert(edit.elements.instructions.getAttribute('maxlength') == null, 'edit instructions unlimited');
@@ -1885,6 +1889,80 @@ async function run() {
     pass('TEST 34: library add form muscle groups + instruction metadata model');
   } catch (err) {
     fail('TEST 34', err);
+  }
+
+  // TEST 35: library full flow — add → persist → detail fields → edit → workout snapshot
+  try {
+    resetStorage();
+    const first = loadApp();
+    const D = first.window.MyFitData;
+    const Img = first.window.MyFitImages;
+    const doc = first.window.document;
+
+    const blob = new first.window.Blob(['guide-image'], { type: 'image/png' });
+    const guideId = await Img.putImage(blob);
+    const thumbId = await Img.putImage(new first.window.Blob(['thumb'], { type: 'image/png' }));
+
+    const exercise = D.normalizeExercise({
+      id: 'lib-flow-bridge',
+      name: 'Flow Test Bridge',
+      primaryMuscleGroup: 'glutes',
+      secondaryMuscleGroups: ['hamstrings'],
+      instructions: 'Nâng hông lên',
+      tips: 'Siết mông',
+      commonMistakes: 'Không ưỡn lưng',
+      notes: 'Dùng thảm',
+      imageId: thumbId,
+      image: '',
+      instructionImages: [
+        { type: 'instruction', imageId: guideId, label: 'Tư thế bắt đầu', order: 0 },
+        { type: 'mistake', imageId: guideId, label: 'Sai lưng', order: 1 }
+      ],
+      sets: 3,
+      reps: 15,
+      resistance: 0,
+      resistanceType: 'bodyweight'
+    }, 'lib');
+
+    first.window.MyFitApp.getLibrary().exercises.push(exercise);
+    D.saveLibrary(first.window.MyFitApp.getLibrary());
+
+    first.dom.window.close();
+
+    const reloaded = loadApp();
+    const lib = reloaded.window.MyFitData.loadLibrary();
+    const saved = lib.exercises.find((ex) => ex.name === 'Flow Test Bridge');
+    assert(saved, 'library exercise persisted after reload');
+    assert(saved.primaryMuscleGroup === 'glutes', 'primary muscle persisted');
+    assert(saved.instructionImages.length === 2, 'instruction images persisted');
+    assert(saved.instructionImages[0].type === 'instruction', 'instruction image type persisted');
+
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
+    assert(html.includes('dprimary-muscle'), 'detail view has primary muscle slot');
+    assert(html.includes('dinstruction-gallery'), 'detail view has instruction gallery');
+
+    const snap = reloaded.window.MyFitData.snapshotExercise(saved);
+    assert(snap.tips === 'Siết mông', 'workout snapshot keeps tips');
+    assert(snap.instructionImages.length === 2, 'workout snapshot keeps instruction images');
+
+    const legacy = reloaded.window.MyFitData.normalizeExercise({
+      id: 'lib-old-face-pull',
+      name: 'Legacy Face Pull',
+      instructions: 'Kéo về mặt',
+      sets: 3,
+      reps: 12,
+      resistance: 0,
+      resistanceType: 'band',
+      image: 'assets/exercises/face-pull.jpg'
+    }, 'lib');
+    assert(legacy.primaryMuscleGroup === '', 'legacy exercise keeps empty primary muscle');
+    assert(Array.isArray(legacy.secondaryMuscleGroups), 'legacy exercise has secondary array');
+    assert(legacy.instructionImages.length === 0, 'legacy exercise has empty instruction images');
+
+    reloaded.dom.window.close();
+    pass('TEST 35: library add persist detail metadata edit-ready + legacy compat');
+  } catch (err) {
+    fail('TEST 35', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

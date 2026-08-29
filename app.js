@@ -24,6 +24,8 @@
     add: []
   };
   var instructionDragIndex = null;
+  var detailContext = { mode: 'schedule', libraryIndex: -1 };
+  var editingLibraryIndex = -1;
 
   function isImageDebugEnabled() {
     try {
@@ -74,6 +76,16 @@
     detailOverlay: document.getElementById('detail-overlay'),
     dprog: document.getElementById('dprog'),
     dname: document.getElementById('dname'),
+    dprimaryMuscle: document.getElementById('dprimary-muscle'),
+    dsecondaryMuscles: document.getElementById('dsecondary-muscles'),
+    dinstructionsLabel: document.getElementById('dinstructions-label'),
+    dnoteWrap: document.getElementById('dnote-wrap'),
+    dthumbnailWrap: document.getElementById('dthumbnail-wrap'),
+    dsets: document.getElementById('dsets'),
+    dresistance: document.getElementById('dresistance'),
+    dresistanceType: document.getElementById('dresistance-type'),
+    detailEditBtn: document.getElementById('detail-edit-btn'),
+    detailStartBtn: document.getElementById('detail-start-btn'),
     dmeta: document.getElementById('dmeta'),
     dmuscles: document.getElementById('dmuscles'),
     dnote: document.getElementById('dnote'),
@@ -453,16 +465,68 @@
     renderAll();
   }
 
-  function openDetail(index) {
-    selectedExerciseIndex = index;
-    var exercises = getDisplayedExercises();
-    var exercise = exercises[index];
-    if (!exercise) return;
-    els.dprog.textContent = 'Bài ' + (index + 1) + '/' + exercises.length;
+  function formatDetailResistance(exercise) {
+    if (exercise.resistanceType === 'band' || exercise.resistanceType === 'bodyweight') {
+      return 'Band / tự trọng';
+    }
+    if (!exercise.resistance) return '0 kg';
+    return exercise.resistance + ' kg';
+  }
+
+  function populateDetailView(exercise, options) {
+    options = options || {};
+    var isLibrary = options.mode === 'library';
+    detailContext = {
+      mode: isLibrary ? 'library' : 'schedule',
+      libraryIndex: options.libraryIndex != null ? options.libraryIndex : -1
+    };
+
+    if (els.dprog) {
+      if (isLibrary) {
+        els.dprog.hidden = true;
+        els.dprog.textContent = '';
+      } else {
+        els.dprog.hidden = false;
+        els.dprog.textContent = 'Bài ' + (options.index + 1) + '/' + options.total;
+      }
+    }
+
     els.dname.textContent = exercise.name;
-    els.dmeta.textContent = D.formatExerciseMeta(exercise);
-    els.dnote.textContent = exercise.notes || '';
-    els.dinstructions.textContent = exercise.instructions || '';
+
+    if (els.dprimaryMuscle) {
+      if (exercise.primaryMuscleGroup) {
+        els.dprimaryMuscle.hidden = false;
+        els.dprimaryMuscle.innerHTML =
+          '<span class="detail-label">Nhóm cơ chính</span>' +
+          '<span class="detail-value">' + escapeHtml(D.muscleGroupLabel(exercise.primaryMuscleGroup)) + '</span>';
+      } else {
+        els.dprimaryMuscle.hidden = true;
+        els.dprimaryMuscle.innerHTML = '';
+      }
+    }
+
+    if (els.dsecondaryMuscles) {
+      var secondary = (exercise.secondaryMuscleGroups || []).filter(function (id) {
+        return id && id !== exercise.primaryMuscleGroup;
+      });
+      if (secondary.length) {
+        els.dsecondaryMuscles.hidden = false;
+        els.dsecondaryMuscles.innerHTML =
+          '<span class="detail-label">Nhóm cơ phụ</span>' +
+          '<span class="detail-value">' +
+          secondary.map(function (id) { return escapeHtml(D.muscleGroupLabel(id)); }).join(', ') +
+          '</span>';
+      } else {
+        els.dsecondaryMuscles.hidden = true;
+        els.dsecondaryMuscles.innerHTML = '';
+      }
+    }
+
+    var instructionsText = exercise.instructions || '';
+    if (els.dinstructionsLabel) els.dinstructionsLabel.hidden = !instructionsText;
+    els.dinstructions.textContent = instructionsText;
+    els.dinstructions.hidden = !instructionsText;
+
     if (els.dtips) {
       if (exercise.tips) {
         els.dtips.hidden = false;
@@ -481,19 +545,80 @@
         els.dcommonMistakes.textContent = '';
       }
     }
-    if (els.dmuscles) {
-      var muscleHtml = formatMuscleTagsHtml(exercise);
-      if (muscleHtml) {
-        els.dmuscles.hidden = false;
-        els.dmuscles.innerHTML = muscleHtml;
+
+    renderDetailInstructionGallery(exercise);
+
+    var repsLabel = exercise.repsRange || exercise.reps;
+    if (els.dsets) {
+      els.dsets.innerHTML =
+        '<span class="detail-label">Set / Reps</span>' +
+        '<span class="detail-value">' + escapeHtml(String(exercise.sets) + ' × ' + String(repsLabel)) + '</span>';
+    }
+    if (els.dresistance) {
+      els.dresistance.innerHTML =
+        '<span class="detail-label">Mức kháng lực</span>' +
+        '<span class="detail-value">' + escapeHtml(formatDetailResistance(exercise)) + '</span>';
+    }
+    if (els.dresistanceType) {
+      els.dresistanceType.innerHTML =
+        '<span class="detail-label">Loại kháng lực</span>' +
+        '<span class="detail-value">' + escapeHtml(D.formatResistanceTypeLabel(exercise.resistanceType)) + '</span>';
+    }
+
+    if (els.dnoteWrap) {
+      if (exercise.notes) {
+        els.dnoteWrap.hidden = false;
+        els.dnote.textContent = exercise.notes;
       } else {
-        els.dmuscles.hidden = true;
-        els.dmuscles.innerHTML = '';
+        els.dnoteWrap.hidden = true;
+        els.dnote.textContent = '';
       }
     }
-    renderDetailInstructionGallery(exercise);
-    applyImageToElement(els.dimage, exercise);
+
+    if (els.dthumbnailWrap && els.dimage) {
+      Img.resolveImageSrc(exercise).then(function (src) {
+        if (src && els.dthumbnailWrap) {
+          els.dthumbnailWrap.hidden = false;
+          els.dimage.src = src;
+          els.dimage.style.display = 'block';
+        } else if (els.dthumbnailWrap) {
+          els.dthumbnailWrap.hidden = true;
+          els.dimage.removeAttribute('src');
+          els.dimage.style.display = 'none';
+        }
+      });
+    }
+
+    if (els.detailEditBtn) els.detailEditBtn.hidden = !isLibrary;
+    if (els.detailStartBtn) {
+      els.detailStartBtn.textContent = isLibrary ? 'Tập bài này' : 'Tập bài này';
+    }
+  }
+
+  function openDetail(index) {
+    selectedExerciseIndex = index;
+    var exercises = getDisplayedExercises();
+    var exercise = exercises[index];
+    if (!exercise) return;
+    populateDetailView(exercise, { mode: 'schedule', index: index, total: exercises.length });
     showOverlay(els.detailOverlay);
+  }
+
+  function openLibraryDetail(index) {
+    var exercise = library.exercises[index];
+    if (!exercise) return;
+    populateDetailView(exercise, { mode: 'library', libraryIndex: index });
+    showOverlay(els.detailOverlay);
+  }
+
+  function openLibraryEdit(index) {
+    var exercise = library.exercises[index];
+    if (!exercise) return;
+    editingLibraryIndex = index;
+    var title = document.querySelector('#edit-overlay h2');
+    if (title) title.textContent = 'Sửa bài thư viện';
+    fillExerciseForm(els.editForm, exercise);
+    showOverlay(els.editOverlay);
   }
 
   function closeDetail() {
@@ -1014,18 +1139,51 @@
   }
 
   function openEdit(index) {
+    editingLibraryIndex = -1;
     selectedExerciseIndex = index;
     var exercise = getDisplayedExercises()[index];
     if (!exercise) return;
+    var title = document.querySelector('#edit-overlay h2');
+    if (title) title.textContent = 'Sửa bài tập';
     fillExerciseForm(els.editForm, exercise);
     showOverlay(els.editOverlay);
   }
 
   function closeEdit() {
+    editingLibraryIndex = -1;
     hideOverlay(els.editOverlay);
   }
 
+  function saveLibraryEdit(event) {
+    event.preventDefault();
+    if (editingLibraryIndex < 0) return;
+    var existing = library.exercises[editingLibraryIndex];
+    if (!existing) return;
+    readExerciseForm(els.editForm, existing.id, 'lib').then(function (exercise) {
+      library.exercises[editingLibraryIndex] = exercise;
+      applyMasterExerciseUpdate(exercise);
+      persistLibrary();
+      syncExerciseCatalog();
+      resetFormImageState('edit');
+      resetInstructionImagesState('edit');
+      var savedIndex = editingLibraryIndex;
+      editingLibraryIndex = -1;
+      closeEdit();
+      renderLibrary();
+      if (detailContext.mode === 'library' && detailContext.libraryIndex === savedIndex) {
+        openLibraryDetail(savedIndex);
+      }
+    }).catch(function (err) {
+      console.error('Failed to save library exercise', err);
+      showFormError('Không lưu được bài tập thư viện. Thử lại với ảnh nhỏ hơn.');
+    });
+  }
+
   function saveEdit(event) {
+    if (editingLibraryIndex >= 0) {
+      saveLibraryEdit(event);
+      return;
+    }
     event.preventDefault();
     var workout = getWorkout(currentWorkoutId);
     var displayed = getDisplayedExercises()[selectedExerciseIndex];
@@ -1162,6 +1320,8 @@
             '</div>' +
           '</div>' +
           '<div class="library-actions">' +
+            '<button type="button" data-library-action="detail" data-index="' + index + '">Xem chi tiết</button>' +
+            '<button type="button" data-library-action="edit" data-index="' + index + '">Sửa bài</button>' +
             '<button type="button" data-library-action="train" data-index="' + index + '">Tập bài này</button>' +
             '<button type="button" data-library-action="add-schedule" data-index="' + index + '">Thêm vào lịch tập</button>' +
           '</div>' +
@@ -1641,6 +1801,11 @@
   }
 
   function startSelectedWorkout() {
+    if (detailContext.mode === 'library' && detailContext.libraryIndex >= 0) {
+      closeDetail();
+      startLibraryExercise(detailContext.libraryIndex);
+      return;
+    }
     closeDetail();
     startWorkout(selectedExerciseIndex);
   }
@@ -1845,6 +2010,14 @@
 
     document.getElementById('detail-close-btn').addEventListener('click', closeDetail);
     document.getElementById('detail-start-btn').addEventListener('click', startSelectedWorkout);
+    if (els.detailEditBtn) {
+      els.detailEditBtn.addEventListener('click', function () {
+        if (detailContext.mode === 'library' && detailContext.libraryIndex >= 0) {
+          closeDetail();
+          openLibraryEdit(detailContext.libraryIndex);
+        }
+      });
+    }
     document.getElementById('edit-close-btn').addEventListener('click', closeEdit);
     document.getElementById('replace-close-btn').addEventListener('click', closeReplace);
     document.getElementById('history-detail-close-btn').addEventListener('click', closeHistoryDetail);
@@ -1871,6 +2044,8 @@
         var btn = event.target.closest('[data-library-action]');
         if (!btn) return;
         var index = parseInt(btn.dataset.index, 10);
+        if (btn.dataset.libraryAction === 'detail') openLibraryDetail(index);
+        if (btn.dataset.libraryAction === 'edit') openLibraryEdit(index);
         if (btn.dataset.libraryAction === 'train') startLibraryExercise(index);
         if (btn.dataset.libraryAction === 'add-schedule') openAddToSchedulePicker(index);
       });

@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
-<meta name="myfit-version" content="39">
+<meta name="myfit-version" content="40">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=39">
-<link rel="icon" href="assets/icon-192.png?v=39">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=39">
+<link rel="stylesheet" href="styles.css?v=40">
+<link rel="icon" href="assets/icon-192.png?v=40">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=40">
 <title>My Fit Mini</title>
 <script>
 /* Force one-time PWA cache refresh when UI version changes.
@@ -16,7 +16,7 @@
 (function () {
   var EXPECTED = '37';
   var VERSION_KEY = 'myfit-ui-version';
-  var RELOAD_KEY = 'myfit-ui-reload-v39';
+  var RELOAD_KEY = 'myfit-ui-reload-v40';
   try {
     var current = localStorage.getItem(VERSION_KEY);
     if (current === EXPECTED) return;
@@ -133,19 +133,32 @@
 </section>
 
 <div class="overlay" id="detail-overlay">
-  <div class="modal">
+  <div class="modal detail-modal">
     <button type="button" class="closex" id="detail-close-btn">×</button>
     <div id="dprog" class="progress"></div>
-    <img id="dimage" class="modal-image" alt="" style="display:none">
     <h2 id="dname"></h2>
-    <div id="dmeta" class="meta"></div>
-    <div id="dmuscles" class="meta muscle-tags" hidden></div>
+    <div id="dprimary-muscle" class="detail-row" hidden></div>
+    <div id="dsecondary-muscles" class="detail-row" hidden></div>
+    <div id="dinstructions-label" class="detail-section-label">Hướng dẫn</div>
     <div id="dinstructions" class="note"></div>
-    <div id="dtips" class="note" hidden></div>
-    <div id="dcommon-mistakes" class="note" hidden></div>
-    <div id="dnote" class="note"></div>
+    <div id="dtips" class="note detail-subnote" hidden></div>
+    <div id="dcommon-mistakes" class="note detail-subnote" hidden></div>
     <div id="dinstruction-gallery" class="instruction-gallery-view" hidden></div>
-    <button type="button" class="btn" id="detail-start-btn">Tập bài này</button>
+    <div id="dsets" class="detail-row"></div>
+    <div id="dresistance" class="detail-row"></div>
+    <div id="dresistance-type" class="detail-row"></div>
+    <div id="dnote-wrap" hidden>
+      <div class="detail-section-label">Ghi chú khác</div>
+      <div id="dnote" class="note"></div>
+    </div>
+    <div id="dthumbnail-wrap" class="detail-thumbnail-wrap" hidden>
+      <div class="detail-section-label">Ảnh minh hoạ</div>
+      <img id="dimage" class="modal-image detail-thumbnail" alt="">
+    </div>
+    <div class="detail-actions">
+      <button type="button" class="btn-secondary" id="detail-edit-btn" hidden>Sửa bài</button>
+      <button type="button" class="btn" id="detail-start-btn">Tập bài này</button>
+    </div>
   </div>
 </div>
 
@@ -422,9 +435,9 @@
   </div>
 </div>
 
-<script src="data.js?v=39"></script>
-<script src="images.js?v=39"></script>
-<script src="rest-audio.js?v=39"></script>
-<script src="app.js?v=39"></script>
+<script src="data.js?v=40"></script>
+<script src="images.js?v=40"></script>
+<script src="rest-audio.js?v=40"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>

@@ -834,6 +834,7 @@
     options = options || {};
     pickMode = 'session';
     pickJumpAfterInsert = !!options.jumpAfterInsert;
+    if (options.fromRest && window.MyFitRestAudio) window.MyFitRestAudio.stopRestCountdownAudio();
     if (els.pickExerciseTitle) els.pickExerciseTitle.textContent = 'Chọn bài';
     if (els.pickExerciseIntro) {
       els.pickExerciseIntro.textContent = options.fromRest
@@ -952,6 +953,7 @@
       clearInterval(restTimerId);
       restTimerId = null;
     }
+    if (window.MyFitRestAudio) window.MyFitRestAudio.stopRestCountdownAudio();
   }
 
   function updateRestDisplay(seconds) {
@@ -1019,10 +1021,12 @@
     persistSession();
     hideOverlay(els.workoutOverlay);
     els.restLabel.textContent = kind === 'set' ? 'Nghỉ giữa SET' : 'Nghỉ giữa BÀI TẬP';
+    clearRestTimer();
+    if (window.MyFitRestAudio) window.MyFitRestAudio.resetCountdownAudio();
     updateRestDisplay(seconds);
     updateRestActions();
     showOverlay(els.restOverlay, 'flex');
-    clearRestTimer();
+    if (window.MyFitRestAudio) window.MyFitRestAudio.handleRestCountdownTick(seconds);
     restTimerId = setInterval(tickRest, 1000);
   }
 
@@ -1056,18 +1060,21 @@
     var remaining = Math.max(0, Math.ceil((new Date(activeSession.restEndTime).getTime() - Date.now()) / 1000));
     activeSession.restRemaining = remaining;
     updateRestDisplay(remaining);
+    if (window.MyFitRestAudio) window.MyFitRestAudio.handleRestCountdownTick(remaining);
     persistSession();
     if (remaining <= 0) finishRestAdvance();
   }
 
   function skipRest() {
     if (!activeSession) return;
+    if (window.MyFitRestAudio) window.MyFitRestAudio.stopRestCountdownAudio();
     activeSession.restEndTime = new Date().toISOString();
     tickRest();
   }
 
   function addRestSeconds() {
     if (!activeSession || !activeSession.restEndTime) return;
+    if (window.MyFitRestAudio) window.MyFitRestAudio.resetCountdownAudio();
     var end = new Date(activeSession.restEndTime).getTime() + 15000;
     activeSession.restEndTime = new Date(end).toISOString();
     tickRest();
@@ -1513,6 +1520,8 @@
     beginRest: beginRest,
     tickRest: tickRest,
     finishRestAdvance: finishRestAdvance,
+    skipRest: skipRest,
+    addRestSeconds: addRestSeconds,
     showWorkoutView: showWorkoutView,
     continueWorkout: continueWorkout,
     openEdit: openEdit,

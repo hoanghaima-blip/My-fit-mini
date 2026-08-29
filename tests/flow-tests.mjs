@@ -60,6 +60,7 @@ function loadApp() {
     .replace(/<script[\s\S]*?<\/script>/gi, '');
   window.eval(readFileSync(join(root, 'data.js'), 'utf8'));
   window.eval(readFileSync(join(root, 'images.js'), 'utf8'));
+  window.eval(readFileSync(join(root, 'rest-audio.js'), 'utf8'));
   window.eval(readFileSync(join(root, 'app.js'), 'utf8'));
   return { window, dom, errors };
 }
@@ -601,7 +602,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="27"'), 'version meta is 27');
+    assert(html.includes('myfit-version" content="28"'), 'version meta is 28');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -615,11 +616,12 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v27'), 'service worker cache v27');
+    assert(sw.includes('my-fit-mini-v28'), 'service worker cache v28');
+    assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v27 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v28 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1300,6 +1302,98 @@ async function run() {
     dom.window.close();
   } catch (err) {
     fail('TEST 28', err);
+  }
+
+  // Rest countdown audio — last 5 seconds only
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const RA = window.MyFitRestAudio;
+    const spoken = [];
+    const hooks = { speak: (text) => spoken.push(text) };
+
+    assert(!!RA, 'MyFitRestAudio module loaded');
+    assert(!RA.shouldAnnounceCountdown(6), 'no audio above 5 seconds');
+    assert(RA.shouldAnnounceCountdown(5), 'audio at 5 seconds');
+
+    // Test 1: 10-second rest — only 5..1 speak once each
+    RA.resetCountdownAudio();
+    spoken.length = 0;
+    for (let sec = 10; sec >= 1; sec -= 1) {
+      RA.handleRestCountdownTick(sec, hooks);
+    }
+    assert(spoken.join(',') === '5,4,3,2,1', 'Test 1: 10s rest speaks 5-1 only');
+
+    // Test 2: 30-second rest — still only last 5 seconds
+    RA.resetCountdownAudio();
+    spoken.length = 0;
+    for (let sec = 30; sec >= 0; sec -= 1) {
+      RA.handleRestCountdownTick(sec, hooks);
+    }
+    assert(spoken.join(',') === '5,4,3,2,1', 'Test 2: 30s rest speaks last 5 only');
+
+    // Test 3: +15 seconds while at 5 — reset, no overlap, restart at 5 later
+    RA.resetCountdownAudio();
+    spoken.length = 0;
+    RA.handleRestCountdownTick(5, hooks);
+    RA.handleRestCountdownTick(5, hooks);
+    assert(spoken.length === 1, 'duplicate tick at 5 does not overlap');
+    RA.resetCountdownAudio();
+    spoken.length = 0;
+    RA.handleRestCountdownTick(20, hooks);
+    RA.handleRestCountdownTick(19, hooks);
+    assert(spoken.length === 0, 'after +15 reset, no audio until last 5');
+    RA.handleRestCountdownTick(5, hooks);
+    assert(spoken.join(',') === '5', 'Test 3: countdown audio restarts at 5');
+
+    // Test 4: skip at 3 — stop immediately, no 2/1 after leaving rest
+    RA.resetCountdownAudio();
+    spoken.length = 0;
+    RA.handleRestCountdownTick(3, hooks);
+    RA.stopRestCountdownAudio();
+    assert(spoken.join(',') === '3', 'Test 4: stop at 3, no further digits');
+
+    const app = window.MyFitApp;
+    app.setActiveSession(null);
+    app.selectWorkout('a');
+    app.startWorkout(0);
+    let session = app.getActiveSession();
+    session.phase = 'rest-exercise';
+    session.restKind = 'exercise';
+    session.restEndTime = new Date(Date.now() + 3000).toISOString();
+    session.restRemaining = 3;
+    app.setActiveSession(session);
+    RA.resetCountdownAudio();
+    RA.handleRestCountdownTick(3, hooks);
+    assert(RA._debugLastAnnounced() === 3, 'countdown audio syncs with displayed 3 seconds');
+    spoken.length = 0;
+    RA.resetCountdownAudio();
+    RA.handleRestCountdownTick(3, hooks);
+    app.skipRest();
+    assert(spoken.join(',') === '3', 'Test 4 integration: skipRest stops at 3 — no 2/1');
+    assert(app.getActiveSession().phase === 'exercise', 'skipRest advances to next exercise');
+
+    // +15 integration: reset audio state when extending rest
+    app.setActiveSession(null);
+    app.startWorkout(0);
+    session = app.getActiveSession();
+    session.phase = 'rest-exercise';
+    session.restKind = 'exercise';
+    session.restEndTime = new Date(Date.now() + 5000).toISOString();
+    session.restRemaining = 5;
+    app.setActiveSession(session);
+    spoken.length = 0;
+    RA.resetCountdownAudio();
+    RA.handleRestCountdownTick(5, hooks);
+    app.addRestSeconds();
+    spoken.length = 0;
+    RA.handleRestCountdownTick(18, hooks);
+    assert(spoken.length === 0, 'addRestSeconds cancels countdown until last 5 again');
+
+    pass('TEST 29: rest countdown audio last 5 seconds');
+    dom.window.close();
+  } catch (err) {
+    fail('TEST 29', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

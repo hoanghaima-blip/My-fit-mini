@@ -28,6 +28,21 @@
     replace: [],
     add: []
   };
+  var instructionLoadPromises = {
+    edit: null,
+    replace: null,
+    add: null
+  };
+  var formEditSource = {
+    edit: null,
+    replace: null,
+    add: null
+  };
+  var formMediaDirty = {
+    edit: { image: false, instructionImages: false },
+    replace: { image: false, instructionImages: false },
+    add: { image: false, instructionImages: false }
+  };
   var instructionDragIndex = null;
   var detailContext = { mode: 'schedule', libraryIndex: -1, libraryExerciseId: '' };
   var editingLibraryIndex = -1;
@@ -192,6 +207,52 @@
   function isExternalImageUrl(value) {
     var url = String(value || '').trim();
     return /^https?:\/\//i.test(url) || /^data:/i.test(url);
+  }
+
+  function markInstructionImagesDirty(form) {
+    formMediaDirty[getFormMode(form)].instructionImages = true;
+  }
+
+  function markPrimaryImageDirty(form) {
+    formMediaDirty[getFormMode(form)].image = true;
+  }
+
+  function resetFormMediaDirty(mode) {
+    formMediaDirty[mode] = { image: false, instructionImages: false };
+  }
+
+  function getFreshWorkoutExercise(exerciseId) {
+    var workout = getWorkout(currentWorkoutId);
+    if (!workout || !Array.isArray(workout.exercises) || !exerciseId) return null;
+    for (var i = 0; i < workout.exercises.length; i += 1) {
+      if (workout.exercises[i] && workout.exercises[i].id === exerciseId) {
+        return workout.exercises[i];
+      }
+    }
+    return null;
+  }
+
+  function mergeExercisePreserveExisting(source, saved, form) {
+    if (!source || !saved) return saved;
+    var mode = getFormMode(form);
+    var mediaDirty = formMediaDirty[mode] || { image: false, instructionImages: false };
+    var state = formImageState[mode];
+
+    if (!mediaDirty.image && !state.pendingFile && !state.clearImage) {
+      var imageFields = D.pickExerciseImageFields(source, saved);
+      saved.image = imageFields.image;
+      saved.imageId = imageFields.imageId;
+    }
+
+    if (!mediaDirty.instructionImages) {
+      saved.instructionImages = D.pickInstructionImagesFields(source, saved);
+    }
+
+    if (source.repsRange && saved.repsRange === undefined) {
+      saved.repsRange = source.repsRange;
+    }
+
+    return saved;
   }
 
   function imageFieldDisplayValue(exercise) {
@@ -762,8 +823,10 @@
   function awaitInstructionFormReady(form) {
     var mode = getFormMode(form);
     var pending = instructionPendingPromises[mode] || [];
-    if (!pending.length) return Promise.resolve();
-    return Promise.all(pending).then(function () {
+    var waits = pending.slice();
+    if (instructionLoadPromises[mode]) waits.push(instructionLoadPromises[mode]);
+    if (!waits.length) return Promise.resolve();
+    return Promise.all(waits).then(function () {
       instructionPendingPromises[mode] = [];
     });
   }
@@ -798,6 +861,7 @@
   }
 
   function addInstructionImageFile(form, file) {
+    markInstructionImagesDirty(form);
     var mode = getFormMode(form);
     var promise = Img.compressImageFile(file).catch(function () { return file; }).then(function (compressed) {
       formInstructionImagesState[mode].push({
@@ -814,6 +878,7 @@
   }
 
   function removeInstructionImage(form, index) {
+    markInstructionImagesDirty(form);
     var mode = getFormMode(form);
     var item = formInstructionImagesState[mode][index];
     if (item && item.previewUrl && item.previewUrl.indexOf('blob:') === 0) {
@@ -829,9 +894,10 @@
     var normalized = D.normalizeInstructionImages(images || []);
     if (!normalized.length) {
       renderInstructionGallery(form);
-      return Promise.resolve();
+      instructionLoadPromises[mode] = Promise.resolve();
+      return instructionLoadPromises[mode];
     }
-    return Promise.all(normalized.map(function (entry) {
+    instructionLoadPromises[mode] = Promise.all(normalized.map(function (entry) {
       return Img.resolveInstructionImageEntry(entry).then(function (src) {
         formInstructionImagesState[mode].push({
           type: entry.type || 'instruction',
@@ -845,6 +911,7 @@
     })).then(function () {
       renderInstructionGallery(form);
     });
+    return instructionLoadPromises[mode];
   }
 
   function uploadInstructionImages(items) {
@@ -889,18 +956,18 @@
     return base;
   }
 
-  function finalizeExerciseFromForm(form, base) {
+  function finalizeExerciseFromForm(form, base, sourceExercise) {
     attachExerciseMetadata(form, base);
     var mode = getFormMode(form);
     return uploadInstructionImages(formInstructionImagesState[mode] || []).then(function (images) {
       base.instructionImages = images;
-      return base;
+      return mergeExercisePreserveExisting(sourceExercise || formEditSource[mode], base, form);
     });
   }
 
-  function chainFinalizeExerciseForm(form, promise) {
+  function chainFinalizeExerciseForm(form, promise, sourceExercise) {
     return promise.then(function (base) {
-      return finalizeExerciseFromForm(form, base);
+      return finalizeExerciseFromForm(form, base, sourceExercise);
     });
   }
 
@@ -946,6 +1013,7 @@
         if (!item || instructionDragIndex == null) return;
         var dropIndex = parseInt(item.dataset.index, 10);
         if (instructionDragIndex === dropIndex) return;
+        markInstructionImagesDirty(form);
         var mode = getFormMode(form);
         var arr = formInstructionImagesState[mode];
         var moved = arr.splice(instructionDragIndex, 1)[0];
@@ -1030,6 +1098,7 @@
         var mode = getFormMode(form);
         var file = fileInput.files && fileInput.files[0];
         if (!file) return;
+        markPrimaryImageDirty(form);
         imageDebug('file selected', file.name, file.type, file.size);
         formImageState[mode].clearImage = false;
         if (urlInput) urlInput.value = '';
@@ -1057,6 +1126,7 @@
     }
     if (clearBtn) {
       clearBtn.addEventListener('click', function () {
+        markPrimaryImageDirty(form);
         var mode = getFormMode(form);
         formImageState[mode].pendingFile = null;
         formImageState[mode].clearImage = true;
@@ -1071,6 +1141,7 @@
       urlInput.addEventListener('input', function () {
         var mode = getFormMode(form);
         if (!urlInput.value.trim()) return;
+        markPrimaryImageDirty(form);
         formImageState[mode].pendingFile = null;
         formImageState[mode].clearImage = false;
         formImageState[mode].existingImageId = '';
@@ -1088,13 +1159,13 @@
     });
   }
 
-  function readExerciseForm(form, existingId, workoutId) {
+  function readExerciseForm(form, existingId, workoutId, sourceExercise) {
     return awaitInstructionFormReady(form).then(function () {
-      return readExerciseFormCore(form, existingId, workoutId);
+      return readExerciseFormCore(form, existingId, workoutId, sourceExercise);
     });
   }
 
-  function readExerciseFormCore(form, existingId, workoutId) {
+  function readExerciseFormCore(form, existingId, workoutId, sourceExercise) {
     var mode = getFormMode(form);
     var state = formImageState[mode];
     var fields = form.elements;
@@ -1129,7 +1200,7 @@
           imageDebug('fallback small data URL', dataUrl.length);
           return base;
         });
-      }));
+      }), sourceExercise);
     }
 
     imageDebug('instructionImages pending count', (formInstructionImagesState[mode] || []).length);
@@ -1144,14 +1215,14 @@
     if (state.clearImage) {
       base.image = '';
       base.imageId = '';
-      return chainFinalizeExerciseForm(form, Promise.resolve(finalizeExerciseImageFields(base)));
+      return chainFinalizeExerciseForm(form, Promise.resolve(finalizeExerciseImageFields(base)), sourceExercise);
     }
 
     var url = fields.image.value.trim();
     if (url) {
       base.image = url;
       base.imageId = '';
-      return chainFinalizeExerciseForm(form, Promise.resolve(base));
+      return chainFinalizeExerciseForm(form, Promise.resolve(base), sourceExercise);
     }
 
     base.image = state.existingImage || '';
@@ -1160,12 +1231,14 @@
       var catalog = D.catalogImageForExercise({ id: existingId, name: base.name });
       if (catalog) base.image = catalog;
     }
-    return chainFinalizeExerciseForm(form, Promise.resolve(finalizeExerciseImageFields(base)));
+    return chainFinalizeExerciseForm(form, Promise.resolve(finalizeExerciseImageFields(base)), sourceExercise);
   }
 
   function fillExerciseForm(form, exercise) {
     var mode = getFormMode(form);
     var fields = form.elements;
+    formEditSource[mode] = exercise ? D.clone(exercise) : null;
+    resetFormMediaDirty(mode);
     resetFormImageState(mode);
     resetInstructionImagesState(mode);
     populateMuscleGroupFields(form);
@@ -1200,8 +1273,9 @@
   function openEdit(index) {
     editingLibraryIndex = -1;
     selectedExerciseIndex = index;
-    var exercise = getDisplayedExercises()[index];
-    if (!exercise) return;
+    var displayed = getDisplayedExercises()[index];
+    if (!displayed) return;
+    var exercise = getFreshWorkoutExercise(displayed.id) || displayed;
     var title = document.querySelector('#edit-overlay h2');
     if (title) title.textContent = 'Sửa bài tập';
     fillExerciseForm(els.editForm, exercise);
@@ -1218,13 +1292,15 @@
     if (editingLibraryIndex < 0) return;
     var existing = library.exercises[editingLibraryIndex];
     if (!existing) return;
-    readExerciseForm(els.editForm, existing.id, 'lib').then(function (exercise) {
+    readExerciseForm(els.editForm, existing.id, 'lib', existing).then(function (exercise) {
       library.exercises[editingLibraryIndex] = exercise;
       applyMasterExerciseUpdate(exercise);
       persistLibrary();
       syncExerciseCatalog();
       resetFormImageState('edit');
       resetInstructionImagesState('edit');
+      formEditSource.edit = null;
+      resetFormMediaDirty('edit');
       var savedId = exercise.id;
       editingLibraryIndex = -1;
       closeEdit();
@@ -1251,7 +1327,8 @@
     if (!workout || !displayed) return;
     var realIndex = findWorkoutExerciseIndexByDisplayed(selectedExerciseIndex);
     if (realIndex < 0) return;
-    readExerciseForm(els.editForm, displayed.id, currentWorkoutId).then(function (exercise) {
+    var sourceExercise = getFreshWorkoutExercise(displayed.id) || displayed;
+    readExerciseForm(els.editForm, displayed.id, currentWorkoutId, sourceExercise).then(function (exercise) {
       imageDebug('[SAVE IMAGE DEBUG]', {
         exerciseId: exercise.id,
         imageId: exercise.imageId,
@@ -1264,6 +1341,8 @@
         throw new Error('WORKOUT_SAVE_FAILED');
       }
       resetFormImageState('edit');
+      formEditSource.edit = null;
+      resetFormMediaDirty('edit');
       closeEdit();
       renderAll();
     }).catch(function (err) {
@@ -1281,6 +1360,8 @@
   function openReplace(index) {
     selectedExerciseIndex = index;
     els.replaceForm.reset();
+    formEditSource.replace = null;
+    resetFormMediaDirty('replace');
     resetFormImageState('replace');
     els.replaceForm.elements.resistanceType.value = 'kg';
     els.replaceForm.elements.sets.value = 3;
@@ -1415,6 +1496,8 @@
   function openAddExerciseForm() {
     if (!els.addExerciseForm) return;
     els.addExerciseForm.reset();
+    formEditSource.add = null;
+    resetFormMediaDirty('add');
     resetFormImageState('add');
     resetInstructionImagesState('add');
     populateMuscleGroupFields(els.addExerciseForm);

@@ -761,6 +761,14 @@
     var imageFields = pickExerciseImageFields(existing, defaults);
     next.image = imageFields.image;
     next.imageId = imageFields.imageId;
+    if (existing.primaryMuscleGroup) next.primaryMuscleGroup = existing.primaryMuscleGroup;
+    if (Array.isArray(existing.secondaryMuscleGroups) && existing.secondaryMuscleGroups.length) {
+      next.secondaryMuscleGroups = existing.secondaryMuscleGroups.slice();
+    }
+    if (existing.tips) next.tips = existing.tips;
+    if (existing.commonMistakes) next.commonMistakes = existing.commonMistakes;
+    var instructionImages = pickInstructionImagesFields(existing, defaults);
+    if (instructionImages.length) next.instructionImages = instructionImages;
     return next;
   }
 
@@ -778,10 +786,10 @@
   function exerciseContentMatches(exercise, defaults) {
     var a = clone(exercise);
     var b = clone(defaults);
-    delete a.image;
-    delete a.imageId;
-    delete b.image;
-    delete b.imageId;
+    ['image', 'imageId', 'primaryMuscleGroup', 'secondaryMuscleGroups', 'tips', 'commonMistakes', 'instructionImages'].forEach(function (key) {
+      delete a[key];
+      delete b[key];
+    });
     return JSON.stringify(a) === JSON.stringify(b);
   }
 

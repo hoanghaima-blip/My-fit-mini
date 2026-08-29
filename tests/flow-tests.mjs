@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="41"'), 'version meta is 41');
-    assert(html.includes('data.js?v=41'), 'script cache bust v41');
+    assert(html.includes('myfit-version" content="42"'), 'version meta is 42');
+    assert(html.includes('data.js?v=42'), 'script cache bust v42');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v41'), 'service worker cache v41');
-    assert(sw.includes('APP_VERSION = \'41\''), 'service worker APP_VERSION v41');
+    assert(sw.includes('my-fit-mini-v42'), 'service worker cache v42');
+    assert(sw.includes('APP_VERSION = \'42\''), 'service worker APP_VERSION v42');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v41 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v42 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -2019,6 +2019,75 @@ async function run() {
     pass('TEST 36: instruction images fast save, storage, detail gallery, merge preserve');
   } catch (err) {
     fail('TEST 36', err);
+  }
+
+  // TEST 37: edit exercise muscle only — preserve thumbnail + instruction images (T4 bài 3/4)
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const app = window.MyFitApp;
+    const Img = window.MyFitImages;
+    const doc = window.document;
+
+    app.showHome();
+    app.selectWorkout('b');
+
+    const bellyIdx = app.getWorkouts().b.exercises.findIndex((ex) => ex.id === 'b-rope-pull-to-belly');
+    const chestIdx = app.getWorkouts().b.exercises.findIndex((ex) => ex.id === 'b-rope-pull-to-chest');
+    assert(bellyIdx >= 0 && chestIdx >= 0, 'T4 rope pull exercises present');
+
+    const catalogBelly = D.catalogImageForExercise({ id: 'b-rope-pull-to-belly', name: 'Kéo dây thừng về bụng – khuỷu khép' });
+    const catalogChest = D.catalogImageForExercise({ id: 'b-rope-pull-to-chest', name: 'Kéo dây thừng về ngực – khuỷu mở' });
+    assert(catalogBelly && catalogChest, 'catalog images exist for T4 rope exercises');
+
+    const workouts = app.getWorkouts();
+    workouts.b.exercises[bellyIdx].imageId = 'img-t4-belly-edit';
+    workouts.b.exercises[bellyIdx].image = '';
+    workouts.b.exercises[bellyIdx].instructionImages = [
+      { type: 'instruction', imageId: 'img-t4-belly-guide', label: 'Kéo về bụng', order: 0 }
+    ];
+    D.saveWorkouts(workouts);
+    sharedImageMemory['img-t4-belly-edit'] = new Blob(['thumb'], { type: 'image/jpeg' });
+    sharedImageMemory['img-t4-belly-guide'] = new Blob(['guide'], { type: 'image/jpeg' });
+
+    app.selectWorkout('b');
+    app.openEdit(bellyIdx);
+    const editForm = doc.getElementById('edit-form');
+    editForm.elements.primaryMuscleGroup.value = 'back';
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(400);
+
+    const bellySaved = app.getWorkouts().b.exercises[bellyIdx];
+    assert(bellySaved.primaryMuscleGroup === 'back', 'bài 3 muscle group updated to Lưng');
+    assert(bellySaved.imageId === 'img-t4-belly-edit', 'bài 3 custom thumbnail imageId preserved on fast edit');
+    assert(bellySaved.instructionImages.length === 1, 'bài 3 instructionImages preserved on fast edit');
+    assert(bellySaved.instructionImages[0].imageId === 'img-t4-belly-guide', 'bài 3 instruction imageId preserved');
+    const bellySrc = await Img.resolveImageSrc(bellySaved);
+    assert(String(bellySrc).indexOf('blob:') === 0, 'bài 3 thumbnail still resolves after edit');
+
+    app.openEdit(chestIdx);
+    editForm.elements.primaryMuscleGroup.value = 'back';
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(400);
+
+    const chestSaved = app.getWorkouts().b.exercises[chestIdx];
+    assert(chestSaved.primaryMuscleGroup === 'back', 'bài 4 muscle group updated to Lưng');
+    assert(chestSaved.image.indexOf('face-pull') >= 0 || chestSaved.image === catalogChest, 'bài 4 catalog thumbnail preserved');
+    const chestSrc = await Img.resolveImageSrc(chestSaved);
+    assert(String(chestSrc).indexOf('face-pull') >= 0, 'bài 4 thumbnail resolves after edit');
+
+    D.saveWorkouts(app.getWorkouts());
+    dom.window.close();
+    const reloaded = loadApp();
+    const bellyReload = reloaded.window.MyFitData.loadWorkouts().b.exercises.find((ex) => ex.id === 'b-rope-pull-to-belly');
+    assert(bellyReload.imageId === 'img-t4-belly-edit', 'bài 3 imageId survives reload');
+    assert(bellyReload.instructionImages.length === 1, 'bài 3 instructionImages survive reload');
+    reloaded.dom.window.close();
+
+    pass('TEST 37: edit muscle only preserves images (T4 bài 3/4)');
+  } catch (err) {
+    fail('TEST 37', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

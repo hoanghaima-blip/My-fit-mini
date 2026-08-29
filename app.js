@@ -19,6 +19,40 @@
     add: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' }
   };
 
+  function isImageDebugEnabled() {
+    try {
+      if (typeof window !== 'undefined' && window.location && window.location.search.indexOf('myfit_debug=image') >= 0) {
+        return true;
+      }
+      return localStorage.getItem('myfit-image-debug') === '1';
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function imageDebug() {
+    if (!isImageDebugEnabled()) return;
+    var args = ['[IMAGE DEBUG]'].concat(Array.prototype.slice.call(arguments));
+    console.log.apply(console, args);
+  }
+
+  function showFormError(message) {
+    if (!message) return;
+    var toast = document.getElementById('form-error-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'form-error-toast';
+      toast.className = 'form-error-toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.hidden = false;
+    clearTimeout(showFormError._timer);
+    showFormError._timer = setTimeout(function () {
+      toast.hidden = true;
+    }, 5000);
+  }
+
   var els = {
     welcomeScreen: document.getElementById('welcome-screen'),
     welcomeBg: document.getElementById('welcome-bg'),
@@ -107,8 +141,9 @@
   }
 
   function persistWorkouts() {
-    D.saveWorkouts(workouts);
+    var saved = D.saveWorkouts(workouts);
     syncExerciseCatalog();
+    return saved;
   }
 
   function syncExerciseCatalog() {
@@ -467,9 +502,15 @@
     var clearBtn = form.querySelector('[data-role="clear"]');
     var fileInput = form.elements.imageFile;
     var urlInput = form.elements.image;
-    if (pickBtn && fileInput) {
-      pickBtn.addEventListener('click', function () {
+    if (pickBtn && fileInput && pickBtn.tagName === 'BUTTON') {
+      pickBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        imageDebug('picker clicked (button)');
         fileInput.click();
+      });
+    } else if (pickBtn && fileInput) {
+      pickBtn.addEventListener('click', function () {
+        imageDebug('picker clicked (label)');
       });
     }
     if (fileInput) {
@@ -477,15 +518,29 @@
         var mode = getFormMode(form);
         var file = fileInput.files && fileInput.files[0];
         if (!file) return;
-        formImageState[mode].pendingFile = file;
+        imageDebug('file selected', file.name, file.type, file.size);
         formImageState[mode].clearImage = false;
-        urlInput.value = '';
-        if (formImageState[mode].previewUrl && formImageState[mode].previewUrl.indexOf('blob:') === 0) {
-          URL.revokeObjectURL(formImageState[mode].previewUrl);
-        }
-        var previewUrl = URL.createObjectURL(file);
+        if (urlInput) urlInput.value = '';
+        Img.compressImageFile(file).then(function (compressed) {
+          imageDebug('compressed', compressed.size || file.size, compressed.type || file.type);
+          formImageState[mode].pendingFile = compressed;
+          if (formImageState[mode].previewUrl && formImageState[mode].previewUrl.indexOf('blob:') === 0) {
+            URL.revokeObjectURL(formImageState[mode].previewUrl);
+          }
+          var previewUrl = URL.createObjectURL(compressed);
         formImageState[mode].previewUrl = previewUrl;
         showFormPreview(form, previewUrl);
+        imageDebug('preview generated', previewUrl.slice(0, 40));
+      }).catch(function (err) {
+          imageDebug('compress failed, using original', err);
+          formImageState[mode].pendingFile = file;
+          if (formImageState[mode].previewUrl && formImageState[mode].previewUrl.indexOf('blob:') === 0) {
+            URL.revokeObjectURL(formImageState[mode].previewUrl);
+          }
+          var previewUrl = URL.createObjectURL(file);
+          formImageState[mode].previewUrl = previewUrl;
+          showFormPreview(form, previewUrl);
+        });
       });
     }
     if (clearBtn) {
@@ -539,14 +594,21 @@
     };
 
     if (state.pendingFile) {
-      return readFileAsDataUrl(state.pendingFile).then(function (dataUrl) {
-        return Img.putImage(state.pendingFile).then(function (imageId) {
-          base.imageId = imageId;
-          base.image = dataUrl;
-          return base;
-        }).catch(function () {
+      imageDebug('save started', state.pendingFile.size, state.pendingFile.type);
+      return Img.putImage(state.pendingFile).then(function (imageId) {
+        base.imageId = imageId;
+        base.image = '';
+        imageDebug('save completed', { exerciseId: base.id, imageId: imageId, image: '' });
+        return base;
+      }).catch(function (err) {
+        imageDebug('putImage failed', err);
+        return readFileAsDataUrl(state.pendingFile).then(function (dataUrl) {
+          if (dataUrl.length > 180000) {
+            throw new Error('IMAGE_TOO_LARGE');
+          }
           base.imageId = '';
           base.image = dataUrl;
+          imageDebug('fallback small data URL', dataUrl.length);
           return base;
         });
       });
@@ -629,13 +691,29 @@
     var realIndex = findWorkoutExerciseIndexByDisplayed(selectedExerciseIndex);
     if (realIndex < 0) return;
     readExerciseForm(els.editForm, displayed.id, currentWorkoutId).then(function (exercise) {
+      imageDebug('[SAVE IMAGE DEBUG]', {
+        exerciseId: exercise.id,
+        imageId: exercise.imageId,
+        imageLen: (exercise.image || '').length,
+        hasCustom: D.hasCustomExerciseImage(exercise)
+      });
       workout.exercises[realIndex] = exercise;
       applyMasterExerciseUpdate(exercise);
-      persistWorkouts();
+      if (!persistWorkouts()) {
+        throw new Error('WORKOUT_SAVE_FAILED');
+      }
+      resetFormImageState('edit');
       closeEdit();
       renderAll();
     }).catch(function (err) {
       console.error('Failed to save exercise image', err);
+      var msg = 'Không lưu được ảnh minh họa.';
+      if (err && err.message === 'IMAGE_TOO_LARGE') {
+        msg = 'Ảnh quá lớn để lưu. Hãy chọn ảnh nhỏ hơn.';
+      } else if (err && err.message === 'WORKOUT_SAVE_FAILED') {
+        msg = 'Không lưu được dữ liệu bài tập (bộ nhớ đầy). Thử lại với ảnh nhỏ hơn.';
+      }
+      showFormError(msg);
     });
   }
 

@@ -396,7 +396,33 @@
   }
 
   function writeJson(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (err) {
+      console.error('localStorage save failed for ' + key, err);
+      return false;
+    }
+  }
+
+  function stripHeavyExerciseImages(workouts) {
+    var next = clone(workouts);
+    Object.keys(next || {}).forEach(function (workoutId) {
+      var workout = next[workoutId];
+      if (!workout || !Array.isArray(workout.exercises)) return;
+      workout.exercises.forEach(function (exercise) {
+        if (!exercise) return;
+        if (exercise.imageId && exercise.image) {
+          exercise.image = '';
+          return;
+        }
+        var image = String(exercise.image || '');
+        if (/^data:/i.test(image) && image.length > 180000) {
+          exercise.image = '';
+        }
+      });
+    });
+    return next;
   }
 
   function migrateLegacyWorkouts(stored) {
@@ -560,7 +586,9 @@
   }
 
   function saveWorkouts(workouts) {
-    writeJson(STORAGE_KEYS.workouts, workouts);
+    var payload = stripHeavyExerciseImages(workouts);
+    if (writeJson(STORAGE_KEYS.workouts, payload)) return true;
+    return writeJson(STORAGE_KEYS.workouts, stripHeavyExerciseImages(payload));
   }
 
   var LEGACY_HISTORY_KEYS = ['myfit-history-v2', 'myfit-history-v1', 'myfit-history'];

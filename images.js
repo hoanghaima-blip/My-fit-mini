@@ -204,6 +204,77 @@
     });
   }
 
+  function compressImageFile(file, options) {
+    options = options || {};
+    var maxWidth = options.maxWidth || 1200;
+    var maxHeight = options.maxHeight || 1200;
+    var quality = options.quality || 0.82;
+    var maxBytes = options.maxBytes || 350000;
+
+    if (!file) return Promise.reject(new Error('no file'));
+    if (typeof document === 'undefined' || !document.createElement) {
+      return Promise.resolve(file);
+    }
+
+    return new Promise(function (resolve) {
+      var settled = false;
+      function finish(value) {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      }
+      var url = URL.createObjectURL(file);
+      var timer = setTimeout(function () {
+        URL.revokeObjectURL(url);
+        finish(file);
+      }, 400);
+      var img = new Image();
+      img.onload = function () {
+        clearTimeout(timer);
+        URL.revokeObjectURL(url);
+        var w = img.naturalWidth || img.width || 1;
+        var h = img.naturalHeight || img.height || 1;
+        var scale = Math.min(1, maxWidth / w, maxHeight / h);
+        var cw = Math.max(1, Math.round(w * scale));
+        var ch = Math.max(1, Math.round(h * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        var ctx = canvas.getContext('2d');
+        if (!ctx) {
+          finish(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, cw, ch);
+
+        function tryQuality(q) {
+          if (canvas.toBlob) {
+            canvas.toBlob(function (blob) {
+              if (!blob) {
+                finish(file);
+                return;
+              }
+              if (blob.size <= maxBytes || q <= 0.45) {
+                finish(blob);
+              } else {
+                tryQuality(Math.max(0.45, q - 0.08));
+              }
+            }, 'image/jpeg', q);
+            return;
+          }
+          finish(file);
+        }
+        tryQuality(quality);
+      };
+      img.onerror = function () {
+        clearTimeout(timer);
+        URL.revokeObjectURL(url);
+        finish(file);
+      };
+      img.src = url;
+    });
+  }
+
   window.MyFitImages = {
     makeImageId: makeImageId,
     putImage: putImage,
@@ -213,6 +284,7 @@
     toPublicUrl: toPublicUrl,
     getAppBasePath: getAppBasePath,
     copyImage: copyImage,
+    compressImageFile: compressImageFile,
     revokeObjectUrl: revokeObjectUrl,
     _memoryStore: memoryStore
   };

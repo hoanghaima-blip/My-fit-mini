@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="36"'), 'version meta is 36');
-    assert(html.includes('data.js?v=36'), 'script cache bust v36');
+    assert(html.includes('myfit-version" content="37"'), 'version meta is 37');
+    assert(html.includes('data.js?v=37'), 'script cache bust v37');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v36'), 'service worker cache v36');
-    assert(sw.includes('APP_VERSION = \'36\''), 'service worker APP_VERSION v36');
+    assert(sw.includes('my-fit-mini-v37'), 'service worker cache v37');
+    assert(sw.includes('APP_VERSION = \'37\''), 'service worker APP_VERSION v37');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v36 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v37 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1437,6 +1437,16 @@ async function run() {
       return null;
     }
 
+    async function waitForUploadPreview(form) {
+      const start = Date.now();
+      while (Date.now() - start < 900) {
+        const preview = form.querySelector('[data-role="preview"]');
+        if (preview && preview.src && preview.src.indexOf('blob:') >= 0) return preview;
+        await wait(25);
+      }
+      return null;
+    }
+
     async function uploadViaEdit(app, doc, win, index) {
       app.openEdit(index);
       const editForm = doc.getElementById('edit-form');
@@ -1444,10 +1454,10 @@ async function run() {
       const fileInput = editForm.elements.imageFile;
       Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
       fileInput.dispatchEvent(new win.Event('change', { bubbles: true }));
-      const preview = editForm.querySelector('[data-role="preview"]');
-      assert(preview && preview.src, 'edit preview shows after file pick');
+      const preview = await waitForUploadPreview(editForm);
+      assert(preview, 'edit preview shows uploaded blob image');
       editForm.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
-      await wait(150);
+      await wait(400);
     }
 
     resetStorage();
@@ -1467,8 +1477,8 @@ async function run() {
 
     const saved = app.getWorkouts().b.exercises[0];
     assert(saved.imageId, 'CASE1: imageId saved on T4 exercise');
-    assert(saved.image && saved.image.indexOf('data:') === 0, 'CASE1: data URL persisted in exercise.image');
-    assert(!saved.image.includes('lat-pulldown'), 'CASE1: catalog path not stored after upload');
+    assert(!saved.image || saved.image.indexOf('lat-pulldown') < 0, 'CASE1: no catalog path stored after upload');
+    assert(!saved.image || saved.image.indexOf('data:') !== 0 || saved.image.length < 200000, 'CASE1: no huge data URL in localStorage');
     const savedSrc = await Img.resolveImageSrc(saved);
     assert(String(savedSrc).indexOf('blob:') === 0, 'CASE1: resolve uses upload');
     assert(String(savedSrc).indexOf('lat-pulldown') < 0, 'CASE6: does not revert to old asset URL');
@@ -1599,7 +1609,7 @@ async function run() {
     const synced = D.syncLibraryFromWorkouts(workouts, library);
     const libLat = synced.library.exercises.find((ex) => ex.id === 'b-lat-pulldown');
     assert(libLat && libLat.imageId === 'img-custom-t4', 'library sync preserves custom imageId');
-    assert(libLat.image.indexOf('data:') === 0, 'library sync preserves data URL');
+    assert(libLat && libLat.imageId === 'img-custom-t4', 'library sync preserves custom imageId');
 
     D.saveWorkouts(workouts);
     D.saveLibrary(synced.library);
@@ -1611,13 +1621,13 @@ async function run() {
     const libraryReload = D2.loadLibrary(workoutsReload);
     const afterLoad = workoutsReload.b.exercises[0];
     assert(afterLoad.imageId === 'img-custom-t4', 'CASE5: reload keeps custom imageId in workouts');
-    assert(afterLoad.image.indexOf('data:') === 0, 'CASE5: reload keeps data URL in workouts');
+    assert(!afterLoad.image || afterLoad.image.indexOf('lat-pulldown') < 0, 'CASE5: no catalog path after custom save');
     const libAfter = libraryReload.exercises.find((ex) => ex.id === 'b-lat-pulldown');
     assert(libAfter && libAfter.imageId === 'img-custom-t4', 'CASE5: reload keeps custom image in library');
 
-    delete sharedImageMemory['img-custom-t4'];
-    const fallbackSrc = await reloaded.window.MyFitImages.resolveImageSrc(afterLoad);
-    assert(String(fallbackSrc).indexOf('data:') === 0, 'data URL resolves when IndexedDB blob missing');
+    sharedImageMemory['img-custom-t4'] = new Blob(['custom-image-bytes'], { type: 'image/png' });
+    const resolved = await reloaded.window.MyFitImages.resolveImageSrc(afterLoad);
+    assert(String(resolved).indexOf('blob:') === 0, 'imageId resolves from IndexedDB/memory');
 
     resetStorage();
     const defaultApp = loadApp();
@@ -1630,6 +1640,83 @@ async function run() {
     pass('TEST 31: mergeExerciseMaster + sync preserve custom images');
   } catch (err) {
     fail('TEST 31', err);
+  }
+
+  // TEST 32: real-device failure — huge data URL must not block localStorage save
+  try {
+    resetStorage();
+    const D0 = loadApp().window.MyFitData;
+    const huge = 'data:image/jpeg;base64,' + 'A'.repeat(5 * 1024 * 1024);
+    const bloated = {
+      a: {
+        id: 'a',
+        title: 'A',
+        exercises: [{
+          id: 'b-lat-pulldown',
+          name: 'Lat Pulldown',
+          image: huge,
+          imageId: 'img-should-strip',
+          sets: 3,
+          reps: 10,
+          resistance: 0,
+          resistanceType: 'kg',
+          instructions: '',
+          notes: ''
+        }]
+      }
+    };
+    const firstTry = D0.saveWorkouts(bloated);
+    assert(firstTry, 'stripHeavyExerciseImages allows save when data URL stripped');
+    const parsed = JSON.parse(sharedStorage.get('myfit-workouts-v2'));
+    assert(parsed.a.exercises[0].image === '', 'heavy data URL stripped when imageId present');
+    assert(parsed.a.exercises[0].imageId === 'img-should-strip', 'imageId kept after strip');
+
+    resetStorage();
+    const { window, dom } = loadApp();
+    const app = window.MyFitApp;
+    const D = window.MyFitData;
+    app.showHome();
+    app.selectWorkout('b');
+
+    app.openEdit(0);
+    const editForm = window.document.getElementById('edit-form');
+    const bigFile = new window.File([new Uint8Array(512 * 1024)], 'phone.jpg', { type: 'image/jpeg' });
+    const fileInput = editForm.elements.imageFile;
+    Object.defineProperty(fileInput, 'files', { value: [bigFile], configurable: true });
+    fileInput.dispatchEvent(new window.Event('change', { bubbles: true }));
+    let preview = null;
+    const start = Date.now();
+    while (Date.now() - start < 900) {
+      const el = editForm.querySelector('[data-role="preview"]');
+      if (el && el.src && el.src.indexOf('blob:') >= 0) {
+        preview = el;
+        break;
+      }
+      await wait(25);
+    }
+    assert(preview, 'TEST32: preview shows uploaded blob image');
+
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(450);
+
+    const saved = app.getWorkouts().b.exercises[0];
+    assert(saved.imageId, 'TEST32: imageId saved');
+    assert(!saved.image || saved.image.length < 200000, 'TEST32: localStorage row has no huge data URL');
+    const stored = sharedStorage.get('myfit-workouts-v2') || '';
+    assert(stored.length < 500000, 'TEST32: workouts JSON stays under localStorage budget');
+
+    const imageId = saved.imageId;
+    dom.window.close();
+    const reloaded = loadApp();
+    const after = reloaded.window.MyFitData.loadWorkouts().b.exercises[0];
+    assert(after.imageId === imageId, 'TEST32: imageId survives reload');
+    const src = await reloaded.window.MyFitImages.resolveImageSrc(after);
+    assert(String(src).indexOf('blob:') === 0 || String(src).indexOf('data:') === 0, 'TEST32: custom image resolves after reload');
+    reloaded.dom.window.close();
+
+    pass('TEST 32: large upload persists via imageId without bloating localStorage');
+  } catch (err) {
+    fail('TEST 32', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

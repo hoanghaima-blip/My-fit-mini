@@ -46,12 +46,59 @@
     return String(id || '').indexOf('lib-') === 0;
   }
 
+  function isDefaultCatalogImage(exercise, imagePath) {
+    var path = String(imagePath || '').trim();
+    if (!path) return true;
+    var catalog = catalogImageForExercise(exercise);
+    return !!catalog && path === catalog;
+  }
+
+  function hasCustomExerciseImage(exercise) {
+    if (!exercise) return false;
+    if (exercise.imageId) return true;
+    var image = String(exercise.image || '').trim();
+    if (!image) return false;
+    if (/^data:/i.test(image)) return true;
+    if (/^https?:\/\//i.test(image)) return true;
+    if (/^blob:/i.test(image)) return true;
+    return !isDefaultCatalogImage(exercise, image);
+  }
+
+  function pickExerciseImageFields(existing, incoming) {
+    var a = existing || {};
+    var b = incoming || {};
+    var aCustom = hasCustomExerciseImage(a);
+    var bCustom = hasCustomExerciseImage(b);
+    if (bCustom && !aCustom) {
+      return { image: b.image || '', imageId: b.imageId || '' };
+    }
+    if (aCustom && !bCustom) {
+      return { image: a.image || '', imageId: a.imageId || '' };
+    }
+    if (bCustom && aCustom) {
+      return { image: b.image || '', imageId: b.imageId || '' };
+    }
+    return {
+      image: b.image || a.image || '',
+      imageId: b.imageId || a.imageId || ''
+    };
+  }
+
   function mergeExerciseMaster(existing, incoming) {
     if (!existing) return clone(incoming);
     if (!incoming) return clone(existing);
     if (isLibExerciseId(existing.id) && !isLibExerciseId(incoming.id)) return clone(incoming);
-    if (!isLibExerciseId(existing.id) && isLibExerciseId(incoming.id)) return clone(existing);
-    return clone(existing);
+    var base;
+    if (!isLibExerciseId(existing.id) && isLibExerciseId(incoming.id)) {
+      base = clone(existing);
+    } else {
+      base = clone(incoming);
+      base.id = incoming.id || existing.id;
+    }
+    var imageFields = pickExerciseImageFields(existing, incoming);
+    base.image = imageFields.image;
+    base.imageId = imageFields.imageId;
+    return base;
   }
 
   function applyMasterFields(target, master) {
@@ -481,6 +528,8 @@
         }
         if (isStableAssetPath(exercise.image)) return;
         if (/^https?:\/\//i.test(String(exercise.image || ''))) return;
+        if (/^data:/i.test(String(exercise.image || ''))) return;
+        if (hasCustomExerciseImage(exercise)) return;
         if (!exercise.image) {
           exercise.image = catalog;
           changed = true;
@@ -1069,6 +1118,10 @@
     DEFAULT_WORKOUTS: DEFAULT_WORKOUTS,
     EXERCISE_IMAGE_ASSETS: EXERCISE_IMAGE_ASSETS,
     catalogImageForExercise: catalogImageForExercise,
+    hasCustomExerciseImage: hasCustomExerciseImage,
+    isDefaultCatalogImage: isDefaultCatalogImage,
+    pickExerciseImageFields: pickExerciseImageFields,
+    mergeExerciseMaster: mergeExerciseMaster,
     isStableAssetPath: isStableAssetPath,
     clone: clone,
     loadWorkouts: loadWorkouts,

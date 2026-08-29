@@ -602,7 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="35"'), 'version meta is 35');
+    assert(html.includes('myfit-version" content="36"'), 'version meta is 36');
+    assert(html.includes('data.js?v=36'), 'script cache bust v36');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -616,14 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v35'), 'service worker cache v35');
+    assert(sw.includes('my-fit-mini-v36'), 'service worker cache v36');
+    assert(sw.includes('APP_VERSION = \'36\''), 'service worker APP_VERSION v36');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v35 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v36 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1465,7 +1467,8 @@ async function run() {
 
     const saved = app.getWorkouts().b.exercises[0];
     assert(saved.imageId, 'CASE1: imageId saved on T4 exercise');
-    assert(!saved.image, 'CASE1: catalog path cleared when upload saved');
+    assert(saved.image && saved.image.indexOf('data:') === 0, 'CASE1: data URL persisted in exercise.image');
+    assert(!saved.image.includes('lat-pulldown'), 'CASE1: catalog path not stored after upload');
     const savedSrc = await Img.resolveImageSrc(saved);
     assert(String(savedSrc).indexOf('blob:') === 0, 'CASE1: resolve uses upload');
     assert(String(savedSrc).indexOf('lat-pulldown') < 0, 'CASE6: does not revert to old asset URL');
@@ -1537,6 +1540,94 @@ async function run() {
     fallbackApp.dom.window.close();
 
     pass('TEST 30: exercise image upload sync T4 schedule library workout');
+  } catch (err) {
+    fail('TEST 30', err);
+  }
+
+  // TEST 31: mergeExerciseMaster + library sync never overwrite custom images (CASE 6–7)
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const catalog = D.catalogImageForExercise({ id: 'b-lat-pulldown', name: 'Lat Pulldown' });
+
+    const staleLibraryEntry = {
+      id: 'b-lat-pulldown',
+      name: 'Lat Pulldown',
+      image: catalog,
+      imageId: '',
+      instructions: '',
+      notes: '',
+      sets: 3,
+      reps: 10,
+      resistance: 0,
+      resistanceType: 'kg'
+    };
+    const customWorkoutEntry = {
+      id: 'b-lat-pulldown',
+      name: 'Lat Pulldown',
+      image: 'data:image/png;base64,custom-bytes',
+      imageId: 'img-custom-t4',
+      instructions: '',
+      notes: '',
+      sets: 3,
+      reps: 11,
+      resistance: 0,
+      resistanceType: 'kg'
+    };
+
+    assert(D.hasCustomExerciseImage(customWorkoutEntry), 'custom entry detected');
+    assert(!D.hasCustomExerciseImage(staleLibraryEntry), 'catalog-only entry is not custom');
+
+    const merged = D.mergeExerciseMaster(staleLibraryEntry, customWorkoutEntry);
+    assert(merged.imageId === 'img-custom-t4', 'CASE6: mergeExerciseMaster keeps custom imageId');
+    assert(merged.image.indexOf('data:') === 0, 'CASE6: mergeExerciseMaster keeps custom data URL');
+    assert(merged.image.indexOf('lat-pulldown') < 0, 'CASE6: merge does not revert to catalog asset');
+
+    const reverseMerged = D.mergeExerciseMaster(customWorkoutEntry, staleLibraryEntry);
+    assert(reverseMerged.imageId === 'img-custom-t4', 'CASE6: reverse merge still keeps custom image');
+    assert(reverseMerged.image.indexOf('data:') === 0, 'CASE6: reverse merge keeps data URL');
+
+    const workouts = {
+      b: {
+        id: 'b',
+        title: 'Upper',
+        exercises: [customWorkoutEntry]
+      }
+    };
+    const library = { exercises: [JSON.parse(JSON.stringify(staleLibraryEntry))] };
+    const synced = D.syncLibraryFromWorkouts(workouts, library);
+    const libLat = synced.library.exercises.find((ex) => ex.id === 'b-lat-pulldown');
+    assert(libLat && libLat.imageId === 'img-custom-t4', 'library sync preserves custom imageId');
+    assert(libLat.image.indexOf('data:') === 0, 'library sync preserves data URL');
+
+    D.saveWorkouts(workouts);
+    D.saveLibrary(synced.library);
+    dom.window.close();
+
+    const reloaded = loadApp();
+    const D2 = reloaded.window.MyFitData;
+    const workoutsReload = D2.loadWorkouts();
+    const libraryReload = D2.loadLibrary(workoutsReload);
+    const afterLoad = workoutsReload.b.exercises[0];
+    assert(afterLoad.imageId === 'img-custom-t4', 'CASE5: reload keeps custom imageId in workouts');
+    assert(afterLoad.image.indexOf('data:') === 0, 'CASE5: reload keeps data URL in workouts');
+    const libAfter = libraryReload.exercises.find((ex) => ex.id === 'b-lat-pulldown');
+    assert(libAfter && libAfter.imageId === 'img-custom-t4', 'CASE5: reload keeps custom image in library');
+
+    delete sharedImageMemory['img-custom-t4'];
+    const fallbackSrc = await reloaded.window.MyFitImages.resolveImageSrc(afterLoad);
+    assert(String(fallbackSrc).indexOf('data:') === 0, 'data URL resolves when IndexedDB blob missing');
+
+    resetStorage();
+    const defaultApp = loadApp();
+    const defaultLat = defaultApp.window.MyFitData.loadWorkouts().b.exercises[0];
+    assert(defaultLat.image.indexOf('lat-pulldown') >= 0, 'CASE7: untouched T4 exercise keeps default asset');
+    assert(!defaultApp.window.MyFitData.hasCustomExerciseImage(defaultLat), 'CASE7: default exercise is not custom');
+    defaultApp.dom.window.close();
+    reloaded.dom.window.close();
+
+    pass('TEST 31: mergeExerciseMaster + sync preserve custom images');
   } catch (err) {
     fail('TEST 30', err);
   }

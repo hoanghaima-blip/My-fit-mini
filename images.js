@@ -167,18 +167,24 @@
     if (imageId) {
       return getImageObjectUrl(imageId).then(function (url) {
         if (url) return url;
-        // Blob missing on this device: fall back to saved path, then catalog.
-        if (path && path.indexOf('blob:') !== 0 && path.indexOf('data:') !== 0) {
-          return Promise.resolve(toPublicUrl(path));
+        // Blob missing on this device: fall back to saved path (incl. data URL), then catalog.
+        if (path && path.indexOf('blob:') !== 0) {
+          if (path.indexOf('data:') === 0 || path.indexOf('http') === 0 || isStableImagePath(path)) {
+            return Promise.resolve(toPublicUrl(path));
+          }
         }
         if (catalog) return Promise.resolve(toPublicUrl(catalog));
         return '';
       });
     }
 
-    // 2. Saved image path or URL stored on the exercise.
-    if (path && path.indexOf('blob:') !== 0 && path.indexOf('data:') !== 0) {
-      if (isStableImagePath(path) || path.indexOf('http') === 0) {
+    // 2. Saved image path, data URL, or URL stored on the exercise.
+    if (path && path.indexOf('blob:') !== 0) {
+      if (
+        path.indexOf('data:') === 0 ||
+        isStableImagePath(path) ||
+        path.indexOf('http') === 0
+      ) {
         return Promise.resolve(toPublicUrl(path));
       }
     }

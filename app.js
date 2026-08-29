@@ -512,6 +512,15 @@
     }
   }
 
+  function readFileAsDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = function () { reject(reader.error || new Error('read failed')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function readExerciseForm(form, existingId, workoutId) {
     var mode = getFormMode(form);
     var state = formImageState[mode];
@@ -530,15 +539,23 @@
     };
 
     if (state.pendingFile) {
-      return Img.putImage(state.pendingFile).then(function (imageId) {
-        base.imageId = imageId;
-        base.image = '';
-        return base;
+      return readFileAsDataUrl(state.pendingFile).then(function (dataUrl) {
+        return Img.putImage(state.pendingFile).then(function (imageId) {
+          base.imageId = imageId;
+          base.image = dataUrl;
+          return base;
+        }).catch(function () {
+          base.imageId = '';
+          base.image = dataUrl;
+          return base;
+        });
       });
     }
 
     function finalizeExerciseImageFields(exercise) {
-      if (exercise.imageId) exercise.image = '';
+      if (exercise.imageId && !/^data:/i.test(String(exercise.image || ''))) {
+        exercise.image = '';
+      }
       return exercise;
     }
 

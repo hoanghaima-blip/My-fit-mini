@@ -42,7 +42,7 @@
   function createHtmlAudio(digit) {
     var audio = new global.Audio(getClipSrc(digit));
     audio.preload = 'auto';
-    audio.volume = 0.92;
+    audio.volume = 0.96;
     audio.setAttribute('playsinline', '');
     audio.setAttribute('webkit-playsinline', '');
     if (typeof audio.playsInline !== 'undefined') audio.playsInline = true;
@@ -170,7 +170,7 @@
     var source = ctx.createBufferSource();
     var gain = ctx.createGain();
     source.buffer = buffer;
-    gain.gain.value = 0.92;
+    gain.gain.value = 0.96;
     source.connect(gain);
     gain.connect(ctx.destination);
     source.start(0);

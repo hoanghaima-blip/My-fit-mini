@@ -602,7 +602,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="33"'), 'version meta is 33');
+    assert(html.includes('myfit-version" content="34"'), 'version meta is 34');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -616,14 +616,14 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v33'), 'service worker cache v33');
+    assert(sw.includes('my-fit-mini-v34'), 'service worker cache v34');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v33 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v34 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }

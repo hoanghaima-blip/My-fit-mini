@@ -49,10 +49,10 @@
     return resolveAssetUrl('assets/audio/count-go.mp3');
   }
 
-  function createHtmlAudio(src) {
+  function createHtmlAudio(src, loud) {
     var audio = new global.Audio(src);
     audio.preload = 'auto';
-    audio.volume = 0.96;
+    audio.volume = loud ? 1 : 0.96;
     audio.setAttribute('playsinline', '');
     audio.setAttribute('webkit-playsinline', '');
     if (typeof audio.playsInline !== 'undefined') audio.playsInline = true;
@@ -71,9 +71,9 @@
     var d;
     for (d = 1; d <= 5; d += 1) {
       if (clipCache[d]) continue;
-      clipCache[d] = createHtmlAudio(getDigitClipSrc(d));
+      clipCache[d] = createHtmlAudio(getDigitClipSrc(d), false);
     }
-    if (!clipCache[GO_KEY]) clipCache[GO_KEY] = createHtmlAudio(getGoClipSrc());
+    if (!clipCache[GO_KEY]) clipCache[GO_KEY] = createHtmlAudio(getGoClipSrc(), true);
   }
 
   function fetchDecodeBuffer(ctx, url) {
@@ -197,7 +197,7 @@
     var source = ctx.createBufferSource();
     var gain = ctx.createGain();
     source.buffer = buffer;
-    gain.gain.value = 0.96;
+    gain.gain.value = key === GO_KEY ? 1 : 0.96;
     source.connect(gain);
     gain.connect(ctx.destination);
     source.start(0);
@@ -211,9 +211,10 @@
   function playHtmlKey(key, src, fallbackText) {
     var clip = clipCache[key];
     if (!clip) {
-      clip = createHtmlAudio(src);
+      clip = createHtmlAudio(src, key === GO_KEY);
       clipCache[key] = clip;
     }
+    if (key === GO_KEY) clip.volume = 1;
     stopCurrentClip();
     clip.currentTime = 0;
     currentClip = clip;

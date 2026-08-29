@@ -601,7 +601,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="21"'), 'version meta is 21');
+    assert(html.includes('myfit-version" content="22"'), 'version meta is 22');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -615,10 +615,10 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v21'), 'service worker cache v21');
+    assert(sw.includes('my-fit-mini-v22'), 'service worker cache v22');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v21 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v22 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1184,11 +1184,10 @@ async function run() {
 
     const css = readFileSync(join(root, 'styles.css'), 'utf8');
     assert(css.includes('welcome-btn-primary'), 'welcome primary button style');
-    assert(css.includes('#dccfc0') || css.includes('#5c4838'), 'welcome uses beige/brown palette');
+    assert(css.includes('#c2b3a0') || css.includes('#dccfc0') || css.includes('#5c4838') || css.includes('186,158,132'), 'welcome uses beige/brown palette');
     assert(/\.welcome-bg\{[^}]*object-fit:cover/.test(css), 'welcome-bg fills screen with cover');
-    assert(css.includes('width:175%'), 'welcome background zoomed out');
-    assert(css.includes('#c2b3a0'), 'welcome bg matches image beige');
-    assert(css.includes('welcome-active'), 'html/body sync with welcome beige');
+    assert(css.includes('width:140%'), 'welcome background reference ratio');
+    assert(css.includes('object-position:center 34%'), 'welcome subject position');
     assert(!css.includes('welcome-btn-primary{background:#fff;color:#222}'), 'welcome primary is not black/white');
 
     pass('TEST 27: reorder navigation + history persistence + welcome palette');

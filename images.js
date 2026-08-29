@@ -196,6 +196,11 @@
     return Promise.resolve('');
   }
 
+  function resolveInstructionImageEntry(entry) {
+    if (!entry || typeof entry !== 'object') return Promise.resolve('');
+    return resolveImageSrc({ imageId: entry.imageId || '', image: entry.image || '' });
+  }
+
   function copyImage(imageId) {
     if (!imageId) return Promise.resolve('');
     return getImage(imageId).then(function (blob) {
@@ -281,6 +286,7 @@
     getImage: getImage,
     getImageObjectUrl: getImageObjectUrl,
     resolveImageSrc: resolveImageSrc,
+    resolveInstructionImageEntry: resolveInstructionImageEntry,
     toPublicUrl: toPublicUrl,
     getAppBasePath: getAppBasePath,
     copyImage: copyImage,

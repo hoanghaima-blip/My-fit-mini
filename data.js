@@ -27,6 +27,83 @@
     { key: 'cn', label: 'CN', emoji: '😴', workoutId: null }
   ];
 
+  var MUSCLE_GROUPS = [
+    { id: 'glutes', label: 'Mông' },
+    { id: 'quads', label: 'Đùi trước' },
+    { id: 'hamstrings', label: 'Đùi sau' },
+    { id: 'calves', label: 'Bắp chân' },
+    { id: 'back', label: 'Lưng' },
+    { id: 'shoulders', label: 'Vai' },
+    { id: 'chest', label: 'Ngực' },
+    { id: 'biceps', label: 'Tay trước' },
+    { id: 'triceps', label: 'Tay sau' },
+    { id: 'core', label: 'Bụng / Core' },
+    { id: 'full-body', label: 'Toàn thân' }
+  ];
+
+  var INSTRUCTION_IMAGE_TYPES = [
+    { id: 'instruction', label: 'Hướng dẫn kỹ thuật' },
+    { id: 'anatomy', label: 'Giải phẫu nhóm cơ' },
+    { id: 'mistake', label: 'Lỗi thường gặp' },
+    { id: 'other', label: 'Khác' }
+  ];
+
+  function muscleGroupLabel(id) {
+    var match = MUSCLE_GROUPS.filter(function (g) { return g.id === id; })[0];
+    return match ? match.label : '';
+  }
+
+  function instructionImageTypeLabel(type) {
+    var match = INSTRUCTION_IMAGE_TYPES.filter(function (t) { return t.id === type; })[0];
+    return match ? match.label : type || '';
+  }
+
+  function normalizeInstructionImages(images) {
+    if (!Array.isArray(images)) return [];
+    return images.map(function (item, index) {
+      if (!item || typeof item !== 'object') return null;
+      return {
+        type: item.type || 'instruction',
+        imageId: item.imageId || '',
+        image: item.image || '',
+        label: item.label || '',
+        order: item.order != null ? item.order : index
+      };
+    }).filter(function (item) {
+      return item && (item.imageId || item.image);
+    }).sort(function (a, b) {
+      return (a.order || 0) - (b.order || 0);
+    });
+  }
+
+  function normalizeExerciseMetadata(exercise) {
+    if (!exercise || typeof exercise !== 'object') return exercise;
+    if (exercise.primaryMuscleGroup === undefined) exercise.primaryMuscleGroup = '';
+    if (!Array.isArray(exercise.secondaryMuscleGroups)) exercise.secondaryMuscleGroups = [];
+    if (exercise.tips === undefined) exercise.tips = '';
+    if (exercise.commonMistakes === undefined) exercise.commonMistakes = '';
+    exercise.instructionImages = normalizeInstructionImages(exercise.instructionImages);
+    return exercise;
+  }
+
+  function stripHeavyInstructionImages(exercise) {
+    if (!exercise || !Array.isArray(exercise.instructionImages)) return;
+    exercise.instructionImages.forEach(function (item) {
+      if (!item) return;
+      if (item.imageId && item.image) item.image = '';
+      var image = String(item.image || '');
+      if (/^data:/i.test(image) && image.length > 180000) item.image = '';
+    });
+  }
+
+  function stripHeavyExerciseRecord(exercise) {
+    if (!exercise) return;
+    if (exercise.imageId && exercise.image) exercise.image = '';
+    var image = String(exercise.image || '');
+    if (/^data:/i.test(image) && image.length > 180000) exercise.image = '';
+    stripHeavyInstructionImages(exercise);
+  }
+
   function slugify(text) {
     return String(text || '')
       .toLowerCase()
@@ -114,6 +191,13 @@
     else delete next.repsRange;
     next.resistance = master.resistance;
     next.resistanceType = master.resistanceType;
+    next.primaryMuscleGroup = master.primaryMuscleGroup || '';
+    next.secondaryMuscleGroups = Array.isArray(master.secondaryMuscleGroups)
+      ? master.secondaryMuscleGroups.slice()
+      : [];
+    next.tips = master.tips || '';
+    next.commonMistakes = master.commonMistakes || '';
+    next.instructionImages = normalizeInstructionImages(master.instructionImages);
     return next;
   }
 
@@ -502,15 +586,7 @@
       var workout = next[workoutId];
       if (!workout || !Array.isArray(workout.exercises)) return;
       workout.exercises.forEach(function (exercise) {
-        if (!exercise) return;
-        if (exercise.imageId && exercise.image) {
-          exercise.image = '';
-          return;
-        }
-        var image = String(exercise.image || '');
-        if (/^data:/i.test(image) && image.length > 180000) {
-          exercise.image = '';
-        }
+        stripHeavyExerciseRecord(exercise);
       });
     });
     return next;
@@ -552,7 +628,7 @@
     exercise.reps = Math.max(1, parseInt(exercise.reps, 10) || 1);
     exercise.resistance = Math.max(0, parseFloat(exercise.resistance) || 0);
     if (!exercise.resistanceType) exercise.resistanceType = 'kg';
-    return exercise;
+    return normalizeExerciseMetadata(exercise);
   }
 
   function normalizeWorkouts(workouts) {
@@ -873,7 +949,14 @@
       reps: exercise.reps,
       repsRange: exercise.repsRange || '',
       resistance: exercise.resistance,
-      resistanceType: exercise.resistanceType
+      resistanceType: exercise.resistanceType,
+      primaryMuscleGroup: exercise.primaryMuscleGroup || '',
+      secondaryMuscleGroups: Array.isArray(exercise.secondaryMuscleGroups)
+        ? exercise.secondaryMuscleGroups.slice()
+        : [],
+      tips: exercise.tips || '',
+      commonMistakes: exercise.commonMistakes || '',
+      instructionImages: normalizeInstructionImages(exercise.instructionImages)
     };
   }
 
@@ -1286,7 +1369,11 @@
   }
 
   function saveLibrary(library) {
-    writeJson(STORAGE_KEYS.library, library);
+    var payload = clone(library);
+    if (payload && Array.isArray(payload.exercises)) {
+      payload.exercises.forEach(stripHeavyExerciseRecord);
+    }
+    writeJson(STORAGE_KEYS.library, payload);
   }
 
   function migrateActiveSessionShape(session) {
@@ -1319,6 +1406,12 @@
     REST_EXERCISE_SECONDS: REST_EXERCISE_SECONDS,
     WORK_SECONDS_PER_SET: WORK_SECONDS_PER_SET,
     WEEK_DAYS: WEEK_DAYS,
+    MUSCLE_GROUPS: MUSCLE_GROUPS,
+    INSTRUCTION_IMAGE_TYPES: INSTRUCTION_IMAGE_TYPES,
+    muscleGroupLabel: muscleGroupLabel,
+    instructionImageTypeLabel: instructionImageTypeLabel,
+    normalizeInstructionImages: normalizeInstructionImages,
+    normalizeExercise: normalizeExercise,
     WELCOME_BACKGROUND_IMAGE: WELCOME_BACKGROUND_IMAGE,
     DEFAULT_WORKOUTS: DEFAULT_WORKOUTS,
     EXERCISE_IMAGE_ASSETS: EXERCISE_IMAGE_ASSETS,

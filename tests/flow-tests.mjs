@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="38"'), 'version meta is 38');
-    assert(html.includes('data.js?v=38'), 'script cache bust v38');
+    assert(html.includes('myfit-version" content="39"'), 'version meta is 39');
+    assert(html.includes('data.js?v=39'), 'script cache bust v39');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v38'), 'service worker cache v38');
-    assert(sw.includes('APP_VERSION = \'38\''), 'service worker APP_VERSION v38');
+    assert(sw.includes('my-fit-mini-v39'), 'service worker cache v39');
+    assert(sw.includes('APP_VERSION = \'39\''), 'service worker APP_VERSION v39');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v38 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v39 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -635,10 +635,14 @@ async function run() {
     const { window } = loadApp();
     const edit = window.document.getElementById('edit-form');
     const replace = window.document.getElementById('replace-form');
-    ['name', 'instructions', 'notes', 'image', 'sets', 'reps', 'resistance', 'resistanceType', 'imageFile'].forEach((field) => {
+    const add = window.document.getElementById('add-exercise-form');
+    ['name', 'instructions', 'notes', 'tips', 'commonMistakes', 'image', 'sets', 'reps', 'resistance', 'resistanceType', 'imageFile', 'primaryMuscleGroup'].forEach((field) => {
       assert(!!edit.elements[field], 'edit has ' + field);
       assert(!!replace.elements[field], 'replace has ' + field);
+      assert(!!add.elements[field], 'add has ' + field);
     });
+    assert(add.querySelector('[data-role="instruction-gallery"]'), 'add form instruction gallery');
+    assert(add.querySelector('[data-role="secondary-muscles"]'), 'add form secondary muscles');
     assert(edit.elements.instructions.getAttribute('maxlength') == null, 'edit instructions unlimited');
     assert(edit.elements.notes.getAttribute('maxlength') == null, 'edit notes unlimited');
     assert(edit.elements.instructions.tagName === 'TEXTAREA', 'instructions is textarea');
@@ -1835,6 +1839,52 @@ async function run() {
     pass('TEST 33: T4 Lưng + Vai six-exercise program + migration preserves head/custom image');
   } catch (err) {
     fail('TEST 33', err);
+  }
+
+  // TEST 34: library add form — muscle groups + instruction metadata
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const addForm = window.document.getElementById('add-exercise-form');
+    assert(D.MUSCLE_GROUPS.length === 11, '11 muscle groups defined');
+    assert(D.INSTRUCTION_IMAGE_TYPES.length === 4, '4 instruction image types');
+    assert(addForm.elements.primaryMuscleGroup, 'add form primary muscle select');
+    assert(addForm.elements.tips, 'add form tips field');
+    assert(addForm.elements.commonMistakes, 'add form common mistakes field');
+    assert(addForm.querySelector('[data-role="instruction-gallery"]'), 'add form instruction gallery');
+
+    const exercise = D.normalizeExercise({
+      id: 'lib-metadata-test',
+      name: 'Metadata Test',
+      primaryMuscleGroup: 'glutes',
+      secondaryMuscleGroups: ['hamstrings', 'core'],
+      instructions: 'Do the move',
+      tips: 'Keep core tight',
+      commonMistakes: 'Do not rush',
+      instructionImages: [
+        { type: 'instruction', imageId: 'img-guide-1', label: 'Start position' },
+        { type: 'anatomy', imageId: 'img-anat-1', label: 'Glute focus' }
+      ],
+      sets: 3,
+      reps: 12,
+      resistance: 0,
+      resistanceType: 'bodyweight'
+    }, 'lib');
+
+    assert(exercise.primaryMuscleGroup === 'glutes', 'primary muscle normalized');
+    assert(exercise.secondaryMuscleGroups.length === 2, 'secondary muscles normalized');
+    assert(exercise.instructionImages.length === 2, 'instruction images normalized');
+    assert(exercise.instructionImages[1].type === 'anatomy', 'instruction image type preserved');
+
+    const snap = D.snapshotExercise(exercise);
+    assert(snap.tips === 'Keep core tight', 'snapshot includes tips');
+    assert(snap.instructionImages.length === 2, 'snapshot includes instruction images');
+
+    dom.window.close();
+    pass('TEST 34: library add form muscle groups + instruction metadata model');
+  } catch (err) {
+    fail('TEST 34', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

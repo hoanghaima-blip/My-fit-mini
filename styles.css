@@ -50,6 +50,31 @@ html.welcome-active,html.welcome-active body{background:#ebe4da}
 .set-log-line{font-size:14px;color:#444;margin-top:4px}
 .library-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .library-actions button{border:0;background:#f0eee9;border-radius:12px;padding:12px 14px;font-size:15px;font-weight:700;cursor:pointer;min-height:44px}
+.field-hint{margin:0 0 8px;font-size:13px;line-height:1.4;color:#888}
+.instruction-panel{border:1px solid #e8e4dc;border-radius:16px;padding:14px 14px 4px;margin:16px 0;background:#faf9f7}
+.instruction-panel legend{padding:0 6px;font-size:14px;font-weight:800;color:#555}
+.muscle-checkboxes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+.muscle-check{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:#444;cursor:pointer}
+.muscle-check input{width:auto;margin:0;flex:0 0 auto}
+.muscle-tags{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
+.muscle-tag{display:inline-block;background:#efeae2;color:#5a5348;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+.muscle-tag.primary{background:#222;color:#fff}
+.instruction-gallery{display:grid;gap:10px}
+.instruction-list{display:grid;gap:10px}
+.instruction-image-item{display:grid;grid-template-columns:auto 72px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid #e5e1da;border-radius:14px;background:#fff}
+.instruction-image-item.dragging{opacity:.55}
+.instruction-drag{cursor:grab;color:#aaa;font-weight:900;user-select:none;padding:4px}
+.instruction-image-item img{width:72px;height:72px;object-fit:cover;border-radius:10px;background:#eeece8}
+.instruction-image-fields{display:grid;gap:6px}
+.instruction-image-fields select,.instruction-image-fields input{font-size:14px;padding:8px 10px}
+.instruction-remove-btn{border:0;background:#f3ece8;color:#a33;border-radius:10px;width:36px;height:36px;font-size:20px;line-height:1;cursor:pointer}
+.instruction-add-btn{position:relative;display:block;text-align:center;margin-top:0;cursor:pointer}
+.instruction-gallery-view{display:grid;gap:12px;margin:12px 0}
+.instruction-view-item{border:1px solid #ece8e1;border-radius:14px;overflow:hidden;background:#fff}
+.instruction-view-item img{width:100%;max-height:220px;object-fit:cover;display:block;background:#eeece8}
+.instruction-view-meta{padding:10px 12px;font-size:13px;color:#666}
+.instruction-view-meta strong{display:block;color:#333;font-size:14px;margin-bottom:4px}
+.detail-section-label{font-size:13px;font-weight:800;color:#888;margin:12px 0 6px;text-transform:uppercase;letter-spacing:.03em}
 .pick-empty{color:#777;padding:12px 0}
 .resistance-history-btn{display:inline-flex;align-items:center;border:0;background:#f0eee9;color:#222;border-radius:999px;padding:10px 14px;font-size:14px;font-weight:700;margin-left:8px;cursor:pointer;min-height:40px}
 .resistance-history-content{margin-top:12px;max-height:60vh;overflow:auto}

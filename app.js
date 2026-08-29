@@ -18,6 +18,12 @@
     replace: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
     add: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' }
   };
+  var formInstructionImagesState = {
+    edit: [],
+    replace: [],
+    add: []
+  };
+  var instructionDragIndex = null;
 
   function isImageDebugEnabled() {
     try {
@@ -69,9 +75,13 @@
     dprog: document.getElementById('dprog'),
     dname: document.getElementById('dname'),
     dmeta: document.getElementById('dmeta'),
+    dmuscles: document.getElementById('dmuscles'),
     dnote: document.getElementById('dnote'),
     dimage: document.getElementById('dimage'),
     dinstructions: document.getElementById('dinstructions'),
+    dtips: document.getElementById('dtips'),
+    dcommonMistakes: document.getElementById('dcommon-mistakes'),
+    dinstructionGallery: document.getElementById('dinstruction-gallery'),
     workoutOverlay: document.getElementById('workout-overlay'),
     wprog: document.getElementById('wprog'),
     wname: document.getElementById('wname'),
@@ -453,12 +463,338 @@
     els.dmeta.textContent = D.formatExerciseMeta(exercise);
     els.dnote.textContent = exercise.notes || '';
     els.dinstructions.textContent = exercise.instructions || '';
+    if (els.dtips) {
+      if (exercise.tips) {
+        els.dtips.hidden = false;
+        els.dtips.textContent = 'Tip: ' + exercise.tips;
+      } else {
+        els.dtips.hidden = true;
+        els.dtips.textContent = '';
+      }
+    }
+    if (els.dcommonMistakes) {
+      if (exercise.commonMistakes) {
+        els.dcommonMistakes.hidden = false;
+        els.dcommonMistakes.textContent = 'Lỗi thường gặp: ' + exercise.commonMistakes;
+      } else {
+        els.dcommonMistakes.hidden = true;
+        els.dcommonMistakes.textContent = '';
+      }
+    }
+    if (els.dmuscles) {
+      var muscleHtml = formatMuscleTagsHtml(exercise);
+      if (muscleHtml) {
+        els.dmuscles.hidden = false;
+        els.dmuscles.innerHTML = muscleHtml;
+      } else {
+        els.dmuscles.hidden = true;
+        els.dmuscles.innerHTML = '';
+      }
+    }
+    renderDetailInstructionGallery(exercise);
     applyImageToElement(els.dimage, exercise);
     showOverlay(els.detailOverlay);
   }
 
   function closeDetail() {
     hideOverlay(els.detailOverlay);
+  }
+
+  function formatMuscleTagsHtml(exercise) {
+    var tags = [];
+    if (exercise.primaryMuscleGroup) {
+      tags.push('<span class="muscle-tag primary">' + escapeHtml(D.muscleGroupLabel(exercise.primaryMuscleGroup)) + '</span>');
+    }
+    (exercise.secondaryMuscleGroups || []).forEach(function (id) {
+      if (id === exercise.primaryMuscleGroup) return;
+      tags.push('<span class="muscle-tag">' + escapeHtml(D.muscleGroupLabel(id)) + '</span>');
+    });
+    return tags.join('');
+  }
+
+  function renderDetailInstructionGallery(exercise) {
+    if (!els.dinstructionGallery) return;
+    var images = D.normalizeInstructionImages(exercise.instructionImages || []);
+    if (!images.length) {
+      els.dinstructionGallery.hidden = true;
+      els.dinstructionGallery.innerHTML = '';
+      return;
+    }
+    els.dinstructionGallery.hidden = false;
+    els.dinstructionGallery.innerHTML = '<div class="detail-section-label">Ảnh hướng dẫn</div>';
+    images.forEach(function (entry) {
+      var item = document.createElement('div');
+      item.className = 'instruction-view-item';
+      var img = document.createElement('img');
+      img.alt = entry.label || '';
+      var meta = document.createElement('div');
+      meta.className = 'instruction-view-meta';
+      meta.innerHTML = '<strong>' + escapeHtml(D.instructionImageTypeLabel(entry.type)) + '</strong>' +
+        (entry.label ? '<span>' + escapeHtml(entry.label) + '</span>' : '');
+      item.appendChild(img);
+      item.appendChild(meta);
+      els.dinstructionGallery.appendChild(item);
+      Img.resolveInstructionImageEntry(entry).then(function (src) {
+        if (src && img.parentNode) img.src = src;
+      });
+    });
+  }
+
+  function populateMuscleGroupFields(form) {
+    if (!form) return;
+    var primary = form.querySelector('[data-role="primary-muscle"]');
+    var secondary = form.querySelector('[data-role="secondary-muscles"]');
+    if (!primary || primary.dataset.populated === '1') return;
+    D.MUSCLE_GROUPS.forEach(function (group) {
+      var opt = document.createElement('option');
+      opt.value = group.id;
+      opt.textContent = group.label;
+      primary.appendChild(opt);
+      if (secondary) {
+        var label = document.createElement('label');
+        label.className = 'muscle-check';
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.name = 'secondaryMuscleGroups';
+        input.value = group.id;
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(' ' + group.label));
+        secondary.appendChild(label);
+      }
+    });
+    primary.dataset.populated = '1';
+  }
+
+  function readMuscleGroupsFromForm(form) {
+    var primaryEl = form.elements.primaryMuscleGroup;
+    var primary = primaryEl ? primaryEl.value : '';
+    var secondary = [];
+    form.querySelectorAll('input[name="secondaryMuscleGroups"]:checked').forEach(function (el) {
+      secondary.push(el.value);
+    });
+    return { primaryMuscleGroup: primary, secondaryMuscleGroups: secondary };
+  }
+
+  function fillMuscleGroupsInForm(form, exercise) {
+    populateMuscleGroupFields(form);
+    var primaryEl = form.elements.primaryMuscleGroup;
+    if (primaryEl) primaryEl.value = exercise.primaryMuscleGroup || '';
+    var secondary = Array.isArray(exercise.secondaryMuscleGroups) ? exercise.secondaryMuscleGroups : [];
+    form.querySelectorAll('input[name="secondaryMuscleGroups"]').forEach(function (el) {
+      el.checked = secondary.indexOf(el.value) >= 0;
+    });
+  }
+
+  function resetInstructionImagesState(mode) {
+    (formInstructionImagesState[mode] || []).forEach(function (item) {
+      if (item.previewUrl && item.previewUrl.indexOf('blob:') === 0) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+    });
+    formInstructionImagesState[mode] = [];
+  }
+
+  function instructionTypeOptions(selected) {
+    return D.INSTRUCTION_IMAGE_TYPES.map(function (type) {
+      return '<option value="' + type.id + '"' + (type.id === selected ? ' selected' : '') + '>' +
+        escapeHtml(type.label) + '</option>';
+    }).join('');
+  }
+
+  function renderInstructionGallery(form) {
+    var mode = getFormMode(form);
+    var list = form.querySelector('[data-role="instruction-list"]');
+    if (!list) return;
+    var items = formInstructionImagesState[mode] || [];
+    list.innerHTML = items.map(function (item, index) {
+      return (
+        '<div class="instruction-image-item" draggable="true" data-index="' + index + '">' +
+          '<span class="instruction-drag" aria-hidden="true">⋮⋮</span>' +
+          '<img src="' + escapeHtml(item.previewUrl || '') + '" alt="">' +
+          '<div class="instruction-image-fields">' +
+            '<select data-field="type">' + instructionTypeOptions(item.type || 'instruction') + '</select>' +
+            '<input data-field="label" type="text" placeholder="Chú thích (tùy chọn)" value="' +
+              escapeHtml(item.label || '') + '">' +
+          '</div>' +
+          '<button type="button" class="instruction-remove-btn" data-action="remove-instruction" data-index="' +
+            index + '">×</button>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function addInstructionImageFile(form, file) {
+    var mode = getFormMode(form);
+    return Img.compressImageFile(file).catch(function () { return file; }).then(function (compressed) {
+      formInstructionImagesState[mode].push({
+        type: 'instruction',
+        label: '',
+        pendingFile: compressed,
+        imageId: '',
+        image: '',
+        previewUrl: URL.createObjectURL(compressed)
+      });
+    });
+  }
+
+  function removeInstructionImage(form, index) {
+    var mode = getFormMode(form);
+    var item = formInstructionImagesState[mode][index];
+    if (item && item.previewUrl && item.previewUrl.indexOf('blob:') === 0) {
+      URL.revokeObjectURL(item.previewUrl);
+    }
+    formInstructionImagesState[mode].splice(index, 1);
+    renderInstructionGallery(form);
+  }
+
+  function loadInstructionImagesIntoForm(form, images) {
+    var mode = getFormMode(form);
+    resetInstructionImagesState(mode);
+    var normalized = D.normalizeInstructionImages(images || []);
+    if (!normalized.length) {
+      renderInstructionGallery(form);
+      return Promise.resolve();
+    }
+    return Promise.all(normalized.map(function (entry) {
+      return Img.resolveInstructionImageEntry(entry).then(function (src) {
+        formInstructionImagesState[mode].push({
+          type: entry.type || 'instruction',
+          label: entry.label || '',
+          pendingFile: null,
+          imageId: entry.imageId || '',
+          image: entry.image || '',
+          previewUrl: src || ''
+        });
+      });
+    })).then(function () {
+      renderInstructionGallery(form);
+    });
+  }
+
+  function uploadInstructionImages(items) {
+    var result = [];
+    var chain = Promise.resolve();
+    items.forEach(function (item, index) {
+      chain = chain.then(function () {
+        var entry = {
+          type: item.type || 'instruction',
+          label: item.label || '',
+          imageId: '',
+          image: '',
+          order: index
+        };
+        if (item.pendingFile) {
+          return Img.putImage(item.pendingFile).then(function (imageId) {
+            entry.imageId = imageId;
+            result.push(entry);
+          }).catch(function () {
+            return readFileAsDataUrl(item.pendingFile).then(function (dataUrl) {
+              if (dataUrl.length <= 180000) entry.image = dataUrl;
+              if (entry.imageId || entry.image) result.push(entry);
+            });
+          });
+        }
+        entry.imageId = item.imageId || '';
+        entry.image = item.image || '';
+        if (entry.imageId || entry.image) result.push(entry);
+        return null;
+      });
+    });
+    return chain.then(function () { return result; });
+  }
+
+  function attachExerciseMetadata(form, base) {
+    var fields = form.elements;
+    var muscle = readMuscleGroupsFromForm(form);
+    base.primaryMuscleGroup = muscle.primaryMuscleGroup;
+    base.secondaryMuscleGroups = muscle.secondaryMuscleGroups;
+    base.tips = fields.tips ? fields.tips.value : '';
+    base.commonMistakes = fields.commonMistakes ? fields.commonMistakes.value : '';
+    return base;
+  }
+
+  function finalizeExerciseFromForm(form, base) {
+    attachExerciseMetadata(form, base);
+    var mode = getFormMode(form);
+    return uploadInstructionImages(formInstructionImagesState[mode] || []).then(function (images) {
+      base.instructionImages = images;
+      return base;
+    });
+  }
+
+  function chainFinalizeExerciseForm(form, promise) {
+    return promise.then(function (base) {
+      return finalizeExerciseFromForm(form, base);
+    });
+  }
+
+  function bindInstructionGallery(form) {
+    var fileInput = form.querySelector('[data-role="instruction-file"]');
+    var list = form.querySelector('[data-role="instruction-list"]');
+    if (fileInput && !fileInput.dataset.bound) {
+      fileInput.dataset.bound = '1';
+      fileInput.addEventListener('change', function () {
+        var files = fileInput.files;
+        if (!files || !files.length) return;
+        var tasks = [];
+        for (var i = 0; i < files.length; i += 1) {
+          tasks.push(addInstructionImageFile(form, files[i]));
+        }
+        Promise.all(tasks).then(function () {
+          fileInput.value = '';
+          renderInstructionGallery(form);
+        });
+      });
+    }
+    if (list && !list.dataset.bound) {
+      list.dataset.bound = '1';
+      list.addEventListener('dragstart', function (event) {
+        var item = event.target.closest('.instruction-image-item');
+        if (!item) return;
+        instructionDragIndex = parseInt(item.dataset.index, 10);
+        item.classList.add('dragging');
+        event.dataTransfer.effectAllowed = 'move';
+      });
+      list.addEventListener('dragend', function (event) {
+        var item = event.target.closest('.instruction-image-item');
+        if (item) item.classList.remove('dragging');
+        instructionDragIndex = null;
+      });
+      list.addEventListener('dragover', function (event) {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+      });
+      list.addEventListener('drop', function (event) {
+        event.preventDefault();
+        var item = event.target.closest('.instruction-image-item');
+        if (!item || instructionDragIndex == null) return;
+        var dropIndex = parseInt(item.dataset.index, 10);
+        if (instructionDragIndex === dropIndex) return;
+        var mode = getFormMode(form);
+        var arr = formInstructionImagesState[mode];
+        var moved = arr.splice(instructionDragIndex, 1)[0];
+        arr.splice(dropIndex, 0, moved);
+        instructionDragIndex = null;
+        renderInstructionGallery(form);
+      });
+      list.addEventListener('click', function (event) {
+        var removeBtn = event.target.closest('[data-action="remove-instruction"]');
+        if (!removeBtn) return;
+        removeInstructionImage(form, parseInt(removeBtn.dataset.index, 10));
+      });
+      list.addEventListener('change', function (event) {
+        var target = event.target;
+        if (!target.dataset.field) return;
+        var itemEl = target.closest('.instruction-image-item');
+        if (!itemEl) return;
+        var idx = parseInt(itemEl.dataset.index, 10);
+        var mode = getFormMode(form);
+        var entry = formInstructionImagesState[mode][idx];
+        if (!entry) return;
+        if (target.dataset.field === 'type') entry.type = target.value;
+        if (target.dataset.field === 'label') entry.label = target.value;
+      });
+    }
   }
 
   function getFormMode(form) {
@@ -595,7 +931,7 @@
 
     if (state.pendingFile) {
       imageDebug('save started', state.pendingFile.size, state.pendingFile.type);
-      return Img.putImage(state.pendingFile).then(function (imageId) {
+      return chainFinalizeExerciseForm(form, Img.putImage(state.pendingFile).then(function (imageId) {
         base.imageId = imageId;
         base.image = '';
         imageDebug('save completed', { exerciseId: base.id, imageId: imageId, image: '' });
@@ -611,7 +947,7 @@
           imageDebug('fallback small data URL', dataUrl.length);
           return base;
         });
-      });
+      }));
     }
 
     function finalizeExerciseImageFields(exercise) {
@@ -624,14 +960,14 @@
     if (state.clearImage) {
       base.image = '';
       base.imageId = '';
-      return Promise.resolve(finalizeExerciseImageFields(base));
+      return chainFinalizeExerciseForm(form, Promise.resolve(finalizeExerciseImageFields(base)));
     }
 
     var url = fields.image.value.trim();
     if (url) {
       base.image = url;
       base.imageId = '';
-      return Promise.resolve(base);
+      return chainFinalizeExerciseForm(form, Promise.resolve(base));
     }
 
     base.image = state.existingImage || '';
@@ -640,16 +976,21 @@
       var catalog = D.catalogImageForExercise({ id: existingId, name: base.name });
       if (catalog) base.image = catalog;
     }
-    return Promise.resolve(finalizeExerciseImageFields(base));
+    return chainFinalizeExerciseForm(form, Promise.resolve(finalizeExerciseImageFields(base)));
   }
 
   function fillExerciseForm(form, exercise) {
     var mode = getFormMode(form);
     var fields = form.elements;
     resetFormImageState(mode);
+    resetInstructionImagesState(mode);
+    populateMuscleGroupFields(form);
+    fillMuscleGroupsInForm(form, exercise);
     fields.name.value = exercise.name;
     fields.instructions.value = exercise.instructions || '';
     fields.notes.value = exercise.notes || '';
+    if (fields.tips) fields.tips.value = exercise.tips || '';
+    if (fields.commonMistakes) fields.commonMistakes.value = exercise.commonMistakes || '';
     fields.image.value = imageFieldDisplayValue(exercise);
     fields.sets.value = exercise.sets;
     fields.reps.value = exercise.reps;
@@ -662,6 +1003,7 @@
       formImageState[mode].previewUrl = src;
       showFormPreview(form, src);
     });
+    return loadInstructionImagesIntoForm(form, exercise.instructionImages);
   }
 
   function findWorkoutExerciseIndexByDisplayed(index) {
@@ -807,12 +1149,14 @@
       return;
     }
     els.libraryList.innerHTML = exercises.map(function (exercise, index) {
+      var muscleHtml = formatMuscleTagsHtml(exercise);
       return (
         '<div class="card" data-library-index="' + index + '">' +
           '<div class="card-top">' +
             placeholderImageHtml('card-image') +
             '<div class="card-body">' +
               '<div class="name">' + escapeHtml(exercise.name) + '</div>' +
+              (muscleHtml ? '<div class="muscle-tags">' + muscleHtml + '</div>' : '') +
               '<div class="meta">' + escapeHtml(D.formatExerciseMeta(exercise)) + '</div>' +
               (exercise.instructions ? '<div class="note">' + escapeHtml(exercise.instructions) + '</div>' : '') +
             '</div>' +
@@ -851,11 +1195,14 @@
     if (!els.addExerciseForm) return;
     els.addExerciseForm.reset();
     resetFormImageState('add');
+    resetInstructionImagesState('add');
+    populateMuscleGroupFields(els.addExerciseForm);
     els.addExerciseForm.elements.sets.value = 3;
     els.addExerciseForm.elements.reps.value = 12;
     els.addExerciseForm.elements.resistance.value = 0;
     els.addExerciseForm.elements.resistanceType.value = 'kg';
     showFormPreview(els.addExerciseForm, '');
+    renderInstructionGallery(els.addExerciseForm);
     showOverlay(els.addExerciseOverlay);
   }
 
@@ -1267,7 +1614,7 @@
       (current.role === 'supplemental' ? ' · Bổ sung' : '');
     els.wname.textContent = snap.name;
     els.wmeta.textContent = D.formatExerciseMeta(snap);
-    els.wset.textContent = [snap.instructions, snap.notes].filter(Boolean).join('\n\n');
+    els.wset.textContent = [snap.instructions, snap.tips, snap.commonMistakes, snap.notes].filter(Boolean).join('\n\n');
     els.wsetDisplay.textContent = 'SET ' + activeSession.currentSet + ' / ' + snap.sets;
     els.wrepsDisplay.textContent = snap.reps + ' REPS';
     writeCurrentSetResistanceToUi(log);
@@ -1505,6 +1852,11 @@
     els.replaceForm.addEventListener('submit', saveReplace);
     bindImagePicker(els.editForm);
     bindImagePicker(els.replaceForm);
+    [els.addExerciseForm, els.editForm, els.replaceForm].forEach(function (form) {
+      if (!form) return;
+      populateMuscleGroupFields(form);
+      bindInstructionGallery(form);
+    });
 
     if (els.addExerciseForm) {
       document.getElementById('add-exercise-close-btn').addEventListener('click', closeAddExerciseForm);

@@ -470,6 +470,8 @@
       var workout = workouts[workoutId];
       if (!workout || !Array.isArray(workout.exercises)) return;
       workout.exercises.forEach(function (exercise) {
+        // User uploads live in imageId — never re-assign catalog over them.
+        if (exercise.imageId) return;
         var catalog = catalogImageForExercise(exercise);
         if (!catalog) return;
         if (exercise.image === 'assets/leg-curl-machine.jpg') {
@@ -477,6 +479,14 @@
           changed = true;
           return;
         }
+        if (isStableAssetPath(exercise.image)) return;
+        if (/^https?:\/\//i.test(String(exercise.image || ''))) return;
+        if (!exercise.image) {
+          exercise.image = catalog;
+          changed = true;
+          return;
+        }
+        // Legacy broken local paths only.
         if (!isStableAssetPath(exercise.image)) {
           exercise.image = catalog;
           changed = true;

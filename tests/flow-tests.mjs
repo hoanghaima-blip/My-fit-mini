@@ -602,7 +602,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="34"'), 'version meta is 34');
+    assert(html.includes('myfit-version" content="35"'), 'version meta is 35');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -616,14 +616,14 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v34'), 'service worker cache v34');
+    assert(sw.includes('my-fit-mini-v35'), 'service worker cache v35');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v34 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v35 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -667,7 +667,21 @@ async function run() {
           resolved === exercise.image || String(resolved).indexOf('assets/exercises/') >= 0,
           exercise.name + ' resolves to asset, not blob/id'
         );
-        // imageId-only stored row still resolves via catalog
+        // uploaded imageId must win over default catalog asset path
+        const uploadBlob = new window.Blob(['catalog-override-test'], { type: 'image/png' });
+        const uploadId = await Img.putImage(uploadBlob);
+        const withUpload = {
+          id: exercise.id,
+          name: exercise.name,
+          image: exercise.image,
+          imageId: uploadId
+        };
+        const uploadResolved = await Img.resolveImageSrc(withUpload);
+        assert(
+          String(uploadResolved).indexOf('blob:') === 0,
+          exercise.name + ' upload wins over catalog asset path'
+        );
+        // imageId-only stored row still resolves via catalog when blob missing
         const idOnly = { id: exercise.id, name: exercise.name, image: '', imageId: 'img-missing-on-other-device' };
         const viaCatalog = await Img.resolveImageSrc(idOnly);
         assert(
@@ -1405,6 +1419,126 @@ async function run() {
     dom.window.close();
   } catch (err) {
     fail('TEST 29', err);
+  }
+
+  // TEST 30: exercise image data flow — T4 upload, sync, fallback (CASE 1–6)
+  try {
+    async function waitForBlobImg(doc, selector, timeoutMs) {
+      const start = Date.now();
+      while (Date.now() - start < (timeoutMs || 500)) {
+        const imgs = doc.querySelectorAll(selector);
+        for (let i = 0; i < imgs.length; i += 1) {
+          if (imgs[i].src && imgs[i].src.indexOf('blob:') >= 0) return imgs[i];
+        }
+        await wait(25);
+      }
+      return null;
+    }
+
+    async function uploadViaEdit(app, doc, win, index) {
+      app.openEdit(index);
+      const editForm = doc.getElementById('edit-form');
+      const file = new win.File(['t4-custom-image-bytes'], 't4-custom.png', { type: 'image/png' });
+      const fileInput = editForm.elements.imageFile;
+      Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+      fileInput.dispatchEvent(new win.Event('change', { bubbles: true }));
+      const preview = editForm.querySelector('[data-role="preview"]');
+      assert(preview && preview.src, 'edit preview shows after file pick');
+      editForm.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true }));
+      await wait(150);
+    }
+
+    resetStorage();
+    const first = loadApp();
+    const D = first.window.MyFitData;
+    const app = first.window.MyFitApp;
+    const Img = first.window.MyFitImages;
+    const doc = first.window.document;
+    app.showHome();
+    app.selectWorkout('b');
+
+    const latBefore = app.getWorkouts().b.exercises[0];
+    const oldAsset = latBefore.image;
+    assert(oldAsset.indexOf('lat-pulldown') >= 0, 'T4 lat pulldown has default asset');
+
+    await uploadViaEdit(app, doc, first.window, 0);
+
+    const saved = app.getWorkouts().b.exercises[0];
+    assert(saved.imageId, 'CASE1: imageId saved on T4 exercise');
+    assert(!saved.image, 'CASE1: catalog path cleared when upload saved');
+    const savedSrc = await Img.resolveImageSrc(saved);
+    assert(String(savedSrc).indexOf('blob:') === 0, 'CASE1: resolve uses upload');
+    assert(String(savedSrc).indexOf('lat-pulldown') < 0, 'CASE6: does not revert to old asset URL');
+
+    const imageIdAfterSave = saved.imageId;
+    first.dom.window.close();
+
+    const reloaded = loadApp();
+    const app2 = reloaded.window.MyFitApp;
+    const Img2 = reloaded.window.MyFitImages;
+    app2.showHome();
+    app2.selectWorkout('b');
+    const latReload = app2.getWorkouts().b.exercises[0];
+    assert(latReload.imageId === imageIdAfterSave, 'CASE1: imageId persists after reload');
+    const reloadSrc = await Img2.resolveImageSrc(latReload);
+    assert(String(reloadSrc).indexOf('blob:') === 0, 'CASE1: upload image after reload');
+
+    app2.openEdit(0);
+    const editForm2 = reloaded.window.document.getElementById('edit-form');
+    const previewAfterReload = editForm2.querySelector('[data-role="preview"]');
+    await wait(50);
+    assert(previewAfterReload && previewAfterReload.src, 'CASE1: edit preview shows saved upload');
+
+    // CASE 2: schedule list uses new image
+    app2.renderAll();
+    const listImg = await waitForBlobImg(reloaded.window.document, '#exercise-list .card-image');
+    assert(listImg, 'CASE2: schedule list shows upload');
+
+    // CASE 3: library synced with upload
+    const libLat = app2.getLibrary().exercises.find(function (ex) {
+      return ex.id === 'b-lat-pulldown';
+    });
+    assert(libLat && libLat.imageId === imageIdAfterSave, 'CASE3: library has upload imageId');
+    const libSrc = await Img2.resolveImageSrc(libLat);
+    assert(String(libSrc).indexOf('blob:') === 0, 'CASE3: library resolves upload');
+
+    app2.showLibrary();
+    app2.renderAll();
+    const libCardImg = await waitForBlobImg(reloaded.window.document, '#library-list .card-image');
+    assert(libCardImg, 'CASE3: library list shows upload');
+
+    // CASE 4: active workout screen shows upload
+    app2.setActiveSession(null);
+    app2.showHome();
+    app2.selectWorkout('b');
+    const D2 = reloaded.window.MyFitData;
+    const session = D2.createWorkoutSession(app2.getWorkouts().b);
+    const sessionEx = session.exercises[0].snapshot;
+    assert(sessionEx.imageId === imageIdAfterSave, 'CASE4: session snapshot carries upload imageId');
+    const sessionSrc = await Img2.resolveImageSrc(sessionEx);
+    assert(String(sessionSrc).indexOf('blob:') === 0, 'CASE4: session snapshot resolves upload');
+    app2.setActiveSession(session);
+    app2.showWorkoutView();
+    const workoutImgAny = await waitForBlobImg(reloaded.window.document, '#workout-overlay img, .workout img');
+    assert(workoutImgAny, 'CASE4: workout overlay shows upload');
+
+    reloaded.dom.window.close();
+
+    // CASE 5: exercise without image uses catalog fallback
+    resetStorage();
+    const fallbackApp = loadApp();
+    const Img3 = fallbackApp.window.MyFitImages;
+    const noImage = { id: 'test-no-img', name: 'Unknown Move', image: '', imageId: '' };
+    const fallbackSrc = await Img3.resolveImageSrc(noImage);
+    assert(!fallbackSrc, 'CASE5: unknown exercise without image has no src');
+    const catalogOnly = { id: 'b-lat-pulldown', name: 'Lat Pulldown', image: '', imageId: '' };
+    const catalogSrc = await Img3.resolveImageSrc(catalogOnly);
+    assert(String(catalogSrc).indexOf('lat-pulldown') >= 0, 'CASE5: known exercise falls back to catalog asset');
+    fallbackApp.dom.window.close();
+
+    pass('TEST 30: exercise image upload sync T4 schedule library workout');
+  } catch (err) {
+    fail('TEST 30', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

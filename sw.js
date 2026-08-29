@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-fit-mini-v34';
+const CACHE_NAME = 'my-fit-mini-v35';
 const APP_VERSION = '34';
 
 const ASSETS = [

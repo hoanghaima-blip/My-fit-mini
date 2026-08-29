@@ -537,10 +537,15 @@
       });
     }
 
+    function finalizeExerciseImageFields(exercise) {
+      if (exercise.imageId) exercise.image = '';
+      return exercise;
+    }
+
     if (state.clearImage) {
       base.image = '';
       base.imageId = '';
-      return Promise.resolve(base);
+      return Promise.resolve(finalizeExerciseImageFields(base));
     }
 
     var url = fields.image.value.trim();
@@ -556,7 +561,7 @@
       var catalog = D.catalogImageForExercise({ id: existingId, name: base.name });
       if (catalog) base.image = catalog;
     }
-    return Promise.resolve(base);
+    return Promise.resolve(finalizeExerciseImageFields(base));
   }
 
   function fillExerciseForm(form, exercise) {
@@ -574,10 +579,6 @@
     if (fields.imageFile) fields.imageFile.value = '';
     formImageState[mode].existingImageId = exercise.imageId || '';
     formImageState[mode].existingImage = exercise.image || '';
-    if (!formImageState[mode].existingImage && !formImageState[mode].existingImageId) {
-      var catalog = D.catalogImageForExercise(exercise);
-      if (catalog) formImageState[mode].existingImage = catalog;
-    }
     Img.resolveImageSrc(exercise).then(function (src) {
       formImageState[mode].previewUrl = src;
       showFormPreview(form, src);

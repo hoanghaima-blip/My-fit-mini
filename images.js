@@ -163,19 +163,28 @@
       catalog = window.MyFitData.catalogImageForExercise(imageRef) || '';
     }
 
-    // Prefer repo/network paths so images work on every device.
-    if (isStableImagePath(path) && path.indexOf('blob:') !== 0 && path.indexOf('data:') !== 0) {
-      return Promise.resolve(toPublicUrl(path));
-    }
-    if (catalog) return Promise.resolve(toPublicUrl(catalog));
-
+    // 1. User-uploaded image (IndexedDB) — never override with catalog asset.
     if (imageId) {
       return getImageObjectUrl(imageId).then(function (url) {
         if (url) return url;
-        if (path) return resolveImageSrc(path);
+        // Blob missing on this device: fall back to saved path, then catalog.
+        if (path && path.indexOf('blob:') !== 0 && path.indexOf('data:') !== 0) {
+          return Promise.resolve(toPublicUrl(path));
+        }
+        if (catalog) return Promise.resolve(toPublicUrl(catalog));
         return '';
       });
     }
+
+    // 2. Saved image path or URL stored on the exercise.
+    if (path && path.indexOf('blob:') !== 0 && path.indexOf('data:') !== 0) {
+      if (isStableImagePath(path) || path.indexOf('http') === 0) {
+        return Promise.resolve(toPublicUrl(path));
+      }
+    }
+
+    // 3. Default catalog asset only when exercise has no custom image.
+    if (catalog) return Promise.resolve(toPublicUrl(catalog));
 
     if (path) return resolveImageSrc(path);
     return Promise.resolve('');

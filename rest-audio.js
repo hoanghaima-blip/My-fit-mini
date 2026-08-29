@@ -153,7 +153,7 @@
     if (typeof synth.resume === 'function') synth.resume();
     cancelSpeechOutput();
     var utter = new global.SpeechSynthesisUtterance(String(digit));
-    utter.lang = 'vi-VN';
+    utter.lang = 'en-US';
     utter.rate = 1.05;
     utter.pitch = 1;
     utter.volume = 0.85;

@@ -615,10 +615,10 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v19'), 'service worker cache v19');
+    assert(sw.includes('my-fit-mini-v20'), 'service worker cache v20');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v19 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v20 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1185,8 +1185,8 @@ async function run() {
     const css = readFileSync(join(root, 'styles.css'), 'utf8');
     assert(css.includes('welcome-btn-primary'), 'welcome primary button style');
     assert(css.includes('#dccfc0') || css.includes('#5c4838'), 'welcome uses beige/brown palette');
-    assert(css.includes('object-fit:contain'), 'welcome shows full image without crop');
-    assert(!css.includes('object-fit:cover'), 'welcome no longer zoom-crops with cover');
+    assert(/\.welcome-bg\{[^}]*object-fit:contain/.test(css), 'welcome-bg uses contain for full image');
+    assert(!/\.welcome-bg\{[^}]*object-fit:cover/.test(css), 'welcome-bg does not use cover crop');
     assert(!css.includes('welcome-btn-primary{background:#fff;color:#222}'), 'welcome primary is not black/white');
 
     pass('TEST 27: reorder navigation + history persistence + welcome palette');

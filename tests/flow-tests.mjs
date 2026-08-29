@@ -601,7 +601,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="20"'), 'version meta is 20');
+    assert(html.includes('myfit-version" content="21"'), 'version meta is 21');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -1185,8 +1185,10 @@ async function run() {
     const css = readFileSync(join(root, 'styles.css'), 'utf8');
     assert(css.includes('welcome-btn-primary'), 'welcome primary button style');
     assert(css.includes('#dccfc0') || css.includes('#5c4838'), 'welcome uses beige/brown palette');
-    assert(/\.welcome-bg\{[^}]*object-fit:contain/.test(css), 'welcome-bg uses contain for full image');
-    assert(!/\.welcome-bg\{[^}]*object-fit:cover/.test(css), 'welcome-bg does not use cover crop');
+    assert(/\.welcome-bg\{[^}]*object-fit:cover/.test(css), 'welcome-bg fills screen with cover');
+    assert(css.includes('width:175%'), 'welcome background zoomed out');
+    assert(css.includes('#c2b3a0'), 'welcome bg matches image beige');
+    assert(css.includes('welcome-active'), 'html/body sync with welcome beige');
     assert(!css.includes('welcome-btn-primary{background:#fff;color:#222}'), 'welcome primary is not black/white');
 
     pass('TEST 27: reorder navigation + history persistence + welcome palette');

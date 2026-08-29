@@ -661,16 +661,22 @@
     }
   }
 
+  function setWelcomePageActive(active) {
+    document.documentElement.classList.toggle('welcome-active', !!active);
+  }
+
   function showWelcome() {
     if (els.welcomeScreen) els.welcomeScreen.hidden = false;
     if (els.appHome) els.appHome.hidden = true;
     if (els.libraryScreen) els.libraryScreen.hidden = true;
+    setWelcomePageActive(true);
   }
 
   function showHome() {
     if (els.welcomeScreen) els.welcomeScreen.hidden = true;
     if (els.appHome) els.appHome.hidden = false;
     if (els.libraryScreen) els.libraryScreen.hidden = true;
+    setWelcomePageActive(false);
     renderAll();
   }
 
@@ -741,6 +747,7 @@
     if (els.welcomeScreen) els.welcomeScreen.hidden = true;
     if (els.appHome) els.appHome.hidden = true;
     if (els.libraryScreen) els.libraryScreen.hidden = false;
+    setWelcomePageActive(false);
     renderLibrary();
   }
 

@@ -161,10 +161,26 @@
     };
   }
 
+  function pickInstructionImagesFields(existing, incoming) {
+    var a = normalizeInstructionImages(existing && existing.instructionImages);
+    var b = normalizeInstructionImages(incoming && incoming.instructionImages);
+    if (b.length && !a.length) return b;
+    if (a.length && !b.length) return a;
+    if (b.length >= a.length) return b;
+    return a;
+  }
+
   function mergeExerciseMaster(existing, incoming) {
     if (!existing) return clone(incoming);
     if (!incoming) return clone(existing);
-    if (isLibExerciseId(existing.id) && !isLibExerciseId(incoming.id)) return clone(incoming);
+    if (isLibExerciseId(existing.id) && !isLibExerciseId(incoming.id)) {
+      var schedulePreferred = clone(incoming);
+      schedulePreferred.instructionImages = pickInstructionImagesFields(existing, incoming);
+      var scheduleImageFields = pickExerciseImageFields(existing, incoming);
+      schedulePreferred.image = scheduleImageFields.image;
+      schedulePreferred.imageId = scheduleImageFields.imageId;
+      return schedulePreferred;
+    }
     var base;
     if (!isLibExerciseId(existing.id) && isLibExerciseId(incoming.id)) {
       base = clone(existing);
@@ -175,6 +191,7 @@
     var imageFields = pickExerciseImageFields(existing, incoming);
     base.image = imageFields.image;
     base.imageId = imageFields.imageId;
+    base.instructionImages = pickInstructionImagesFields(existing, incoming);
     return base;
   }
 
@@ -1426,6 +1443,7 @@
     hasCustomExerciseImage: hasCustomExerciseImage,
     isDefaultCatalogImage: isDefaultCatalogImage,
     pickExerciseImageFields: pickExerciseImageFields,
+    pickInstructionImagesFields: pickInstructionImagesFields,
     mergeExerciseMaster: mergeExerciseMaster,
     isStableAssetPath: isStableAssetPath,
     clone: clone,

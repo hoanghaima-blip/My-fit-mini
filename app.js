@@ -23,8 +23,13 @@
     replace: [],
     add: []
   };
+  var instructionPendingPromises = {
+    edit: [],
+    replace: [],
+    add: []
+  };
   var instructionDragIndex = null;
-  var detailContext = { mode: 'schedule', libraryIndex: -1 };
+  var detailContext = { mode: 'schedule', libraryIndex: -1, libraryExerciseId: '' };
   var editingLibraryIndex = -1;
 
   function isImageDebugEnabled() {
@@ -597,24 +602,29 @@
 
   function openDetail(index) {
     selectedExerciseIndex = index;
-    var exercises = getDisplayedExercises();
-    var exercise = exercises[index];
-    if (!exercise) return;
-    populateDetailView(exercise, { mode: 'schedule', index: index, total: exercises.length });
-    showOverlay(els.detailOverlay);
-  }
-
-  function openLibraryDetail(index) {
-    var exercise = library.exercises[index];
-    if (!exercise) return;
-    populateDetailView(exercise, { mode: 'library', libraryIndex: index });
+    var displayed = getDisplayedExercises()[index];
+    if (!displayed) return;
+    var workout = getWorkout(currentWorkoutId);
+    var exercise = displayed;
+    if (workout && Array.isArray(workout.exercises)) {
+      var fresh = workout.exercises.filter(function (ex) { return ex.id === displayed.id; })[0];
+      if (fresh) exercise = fresh;
+    }
+    populateDetailView(exercise, {
+      mode: 'schedule',
+      index: index,
+      total: getDisplayedExercises().length
+    });
     showOverlay(els.detailOverlay);
   }
 
   function openLibraryEdit(index) {
-    var exercise = library.exercises[index];
+    var stored = D.loadLibrary(workouts);
+    library = stored;
+    var exercise = stored.exercises[index];
     if (!exercise) return;
     editingLibraryIndex = index;
+    detailContext.libraryExerciseId = exercise.id;
     var title = document.querySelector('#edit-overlay h2');
     if (title) title.textContent = 'Sửa bài thư viện';
     fillExerciseForm(els.editForm, exercise);
@@ -652,6 +662,7 @@
       item.className = 'instruction-view-item';
       var img = document.createElement('img');
       img.alt = entry.label || '';
+      img.loading = 'lazy';
       var meta = document.createElement('div');
       meta.className = 'instruction-view-meta';
       meta.innerHTML = '<strong>' + escapeHtml(D.instructionImageTypeLabel(entry.type)) + '</strong>' +
@@ -660,9 +671,37 @@
       item.appendChild(meta);
       els.dinstructionGallery.appendChild(item);
       Img.resolveInstructionImageEntry(entry).then(function (src) {
-        if (src && img.parentNode) img.src = src;
+        if (!src || !img.parentNode) return;
+        img.src = src;
       });
     });
+  }
+
+  function findLibraryExerciseIndexById(exerciseId) {
+    var exercises = (library && library.exercises) || [];
+    for (var i = 0; i < exercises.length; i += 1) {
+      if (exercises[i] && exercises[i].id === exerciseId) return i;
+    }
+    return -1;
+  }
+
+  function getLibraryExerciseById(exerciseId) {
+    var stored = D.loadLibrary(workouts);
+    var exercises = (stored && stored.exercises) || [];
+    for (var i = 0; i < exercises.length; i += 1) {
+      if (exercises[i] && exercises[i].id === exerciseId) return exercises[i];
+    }
+    return null;
+  }
+
+  function openLibraryDetail(index) {
+    var stored = D.loadLibrary(workouts);
+    library = stored;
+    var exercise = stored.exercises[index];
+    if (!exercise) return;
+    detailContext.libraryExerciseId = exercise.id;
+    populateDetailView(exercise, { mode: 'library', libraryIndex: index, libraryExerciseId: exercise.id });
+    showOverlay(els.detailOverlay);
   }
 
   function populateMuscleGroupFields(form) {
@@ -717,6 +756,16 @@
       }
     });
     formInstructionImagesState[mode] = [];
+    instructionPendingPromises[mode] = [];
+  }
+
+  function awaitInstructionFormReady(form) {
+    var mode = getFormMode(form);
+    var pending = instructionPendingPromises[mode] || [];
+    if (!pending.length) return Promise.resolve();
+    return Promise.all(pending).then(function () {
+      instructionPendingPromises[mode] = [];
+    });
   }
 
   function instructionTypeOptions(selected) {
@@ -750,7 +799,7 @@
 
   function addInstructionImageFile(form, file) {
     var mode = getFormMode(form);
-    return Img.compressImageFile(file).catch(function () { return file; }).then(function (compressed) {
+    var promise = Img.compressImageFile(file).catch(function () { return file; }).then(function (compressed) {
       formInstructionImagesState[mode].push({
         type: 'instruction',
         label: '',
@@ -760,6 +809,8 @@
         previewUrl: URL.createObjectURL(compressed)
       });
     });
+    instructionPendingPromises[mode].push(promise);
+    return promise;
   }
 
   function removeInstructionImage(form, index) {
@@ -1038,6 +1089,12 @@
   }
 
   function readExerciseForm(form, existingId, workoutId) {
+    return awaitInstructionFormReady(form).then(function () {
+      return readExerciseFormCore(form, existingId, workoutId);
+    });
+  }
+
+  function readExerciseFormCore(form, existingId, workoutId) {
     var mode = getFormMode(form);
     var state = formImageState[mode];
     var fields = form.elements;
@@ -1074,6 +1131,8 @@
         });
       }));
     }
+
+    imageDebug('instructionImages pending count', (formInstructionImagesState[mode] || []).length);
 
     function finalizeExerciseImageFields(exercise) {
       if (exercise.imageId && !/^data:/i.test(String(exercise.image || ''))) {
@@ -1166,12 +1225,14 @@
       syncExerciseCatalog();
       resetFormImageState('edit');
       resetInstructionImagesState('edit');
-      var savedIndex = editingLibraryIndex;
+      var savedId = exercise.id;
       editingLibraryIndex = -1;
       closeEdit();
+      library = D.loadLibrary(workouts);
       renderLibrary();
-      if (detailContext.mode === 'library' && detailContext.libraryIndex === savedIndex) {
-        openLibraryDetail(savedIndex);
+      if (detailContext.mode === 'library' && detailContext.libraryExerciseId === savedId) {
+        var detailIndex = findLibraryExerciseIndexById(savedId);
+        if (detailIndex >= 0) openLibraryDetail(detailIndex);
       }
     }).catch(function (err) {
       console.error('Failed to save library exercise', err);

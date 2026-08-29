@@ -1,7 +1,10 @@
 (function (global) {
   'use strict';
 
+  var GO_KEY = 'go';
   var lastAnnouncedSecond = null;
+  var goPlayed = false;
+  var goCallbackTimer = null;
   var audioUnlocked = false;
   var currentClip = null;
   var currentSource = null;
@@ -29,8 +32,7 @@
     if (synth && typeof synth.cancel === 'function') synth.cancel();
   }
 
-  function getClipSrc(digit) {
-    var rel = 'assets/audio/count-' + digit + '.mp3';
+  function resolveAssetUrl(rel) {
     if (global.document && global.document.createElement) {
       var link = global.document.createElement('a');
       link.href = rel;
@@ -39,8 +41,16 @@
     return rel;
   }
 
-  function createHtmlAudio(digit) {
-    var audio = new global.Audio(getClipSrc(digit));
+  function getDigitClipSrc(digit) {
+    return resolveAssetUrl('assets/audio/count-' + digit + '.mp3');
+  }
+
+  function getGoClipSrc() {
+    return resolveAssetUrl('assets/audio/count-go.mp3');
+  }
+
+  function createHtmlAudio(src) {
+    var audio = new global.Audio(src);
     audio.preload = 'auto';
     audio.volume = 0.96;
     audio.setAttribute('playsinline', '');
@@ -61,8 +71,22 @@
     var d;
     for (d = 1; d <= 5; d += 1) {
       if (clipCache[d]) continue;
-      clipCache[d] = createHtmlAudio(d);
+      clipCache[d] = createHtmlAudio(getDigitClipSrc(d));
     }
+    if (!clipCache[GO_KEY]) clipCache[GO_KEY] = createHtmlAudio(getGoClipSrc());
+  }
+
+  function fetchDecodeBuffer(ctx, url) {
+    return fetch(url)
+      .then(function (response) {
+        if (!response.ok) throw new Error('fetch failed');
+        return response.arrayBuffer();
+      })
+      .then(function (data) {
+        return new Promise(function (resolve, reject) {
+          ctx.decodeAudioData(data, resolve, reject);
+        });
+      });
   }
 
   function loadAudioBuffers() {
@@ -72,27 +96,30 @@
       bufferLoadPromise = Promise.resolve();
       return bufferLoadPromise;
     }
-    bufferLoadPromise = Promise.all([1, 2, 3, 4, 5].map(function (digit) {
+    var jobs = [1, 2, 3, 4, 5].map(function (digit) {
       if (bufferCache[digit]) return Promise.resolve();
-      return fetch(getClipSrc(digit))
-        .then(function (response) {
-          if (!response.ok) throw new Error('fetch failed');
-          return response.arrayBuffer();
-        })
-        .then(function (data) {
-          return new Promise(function (resolve, reject) {
-            ctx.decodeAudioData(data, resolve, reject);
-          });
-        })
-        .then(function (buffer) {
-          bufferCache[digit] = buffer;
-        })
-        .catch(function () {});
-    }));
+      return fetchDecodeBuffer(ctx, getDigitClipSrc(digit)).then(function (buffer) {
+        bufferCache[digit] = buffer;
+      }).catch(function () {});
+    });
+    if (!bufferCache[GO_KEY]) {
+      jobs.push(fetchDecodeBuffer(ctx, getGoClipSrc()).then(function (buffer) {
+        bufferCache[GO_KEY] = buffer;
+      }).catch(function () {}));
+    }
+    bufferLoadPromise = Promise.all(jobs);
     return bufferLoadPromise;
   }
 
+  function clearGoCallbackTimer() {
+    if (goCallbackTimer) {
+      clearTimeout(goCallbackTimer);
+      goCallbackTimer = null;
+    }
+  }
+
   function stopCurrentClip() {
+    clearGoCallbackTimer();
     if (currentSource) {
       try { currentSource.stop(0); } catch (err) {}
       currentSource = null;
@@ -118,7 +145,7 @@
     preloadClips();
     resumeAudioContext();
     loadAudioBuffers();
-    var primer = clipCache[1] || createHtmlAudio(1);
+    var primer = clipCache[1] || createHtmlAudio(getDigitClipSrc(1));
     clipCache[1] = primer;
     var prevVolume = primer.volume;
     primer.volume = isIOS() ? 0.001 : 0.02;
@@ -147,12 +174,12 @@
     global.document.addEventListener('click', unlockOnce, { capture: true });
   }
 
-  function speakWithSynth(digit) {
+  function speakWithSynth(text) {
     var synth = getSpeechSynth();
     if (!synth || typeof global.SpeechSynthesisUtterance !== 'function') return false;
     if (typeof synth.resume === 'function') synth.resume();
     cancelSpeechOutput();
-    var utter = new global.SpeechSynthesisUtterance(String(digit));
+    var utter = new global.SpeechSynthesisUtterance(String(text));
     utter.lang = 'en-US';
     utter.rate = 1.05;
     utter.pitch = 1;
@@ -161,9 +188,9 @@
     return true;
   }
 
-  function playBufferDigit(digit) {
+  function playBufferKey(key) {
     var ctx = getAudioContext();
-    var buffer = bufferCache[digit];
+    var buffer = bufferCache[key];
     if (!ctx || !buffer) return false;
     if (ctx.state === 'suspended') ctx.resume();
     stopCurrentClip();
@@ -181,11 +208,11 @@
     return true;
   }
 
-  function playHtmlDigit(digit) {
-    var clip = clipCache[digit];
+  function playHtmlKey(key, src, fallbackText) {
+    var clip = clipCache[key];
     if (!clip) {
-      clip = createHtmlAudio(digit);
-      clipCache[digit] = clip;
+      clip = createHtmlAudio(src);
+      clipCache[key] = clip;
     }
     stopCurrentClip();
     clip.currentTime = 0;
@@ -193,22 +220,26 @@
     var playPromise = clip.play();
     if (playPromise && typeof playPromise.catch === 'function') {
       playPromise.catch(function () {
-        speakWithSynth(digit);
+        if (fallbackText) speakWithSynth(fallbackText);
       });
     }
-    return true;
+    return clip;
+  }
+
+  function playClipKey(key, src, fallbackText) {
+    if (bufferCache[key] && playBufferKey(key)) return Promise.resolve();
+    if (audioUnlocked && bufferLoadPromise) {
+      return bufferLoadPromise.then(function () {
+        if (bufferCache[key] && playBufferKey(key)) return;
+        playHtmlKey(key, src, fallbackText);
+      });
+    }
+    playHtmlKey(key, src, fallbackText);
+    return Promise.resolve();
   }
 
   function playClipDigit(digit) {
-    if (bufferCache[digit] && playBufferDigit(digit)) return;
-    if (audioUnlocked && bufferLoadPromise) {
-      bufferLoadPromise.then(function () {
-        if (bufferCache[digit] && playBufferDigit(digit)) return;
-        playHtmlDigit(digit);
-      });
-      return;
-    }
-    playHtmlDigit(digit);
+    playClipKey(digit, getDigitClipSrc(digit), String(digit));
   }
 
   function shouldAnnounceCountdown(remainingSeconds) {
@@ -227,21 +258,22 @@
   }
 
   function stopRestCountdownAudio() {
+    goPlayed = false;
     stopCurrentClip();
     cancelSpeechOutput();
   }
 
   function resetCountdownAudio() {
-    stopRestCountdownAudio();
+    goPlayed = false;
     lastAnnouncedSecond = null;
+    stopCurrentClip();
+    cancelSpeechOutput();
   }
 
   function handleRestCountdownTick(remainingSeconds, hooks) {
     var remaining = Math.max(0, Math.ceil(Number(remainingSeconds) || 0));
     if (remaining <= 0) {
-      stopRestCountdownAudio();
-      lastAnnouncedSecond = null;
-      return { announced: false, stopped: true, remaining: 0 };
+      return { announced: false, stopped: false, remaining: 0, readyForGo: true };
     }
     if (!shouldAnnounceCountdown(remaining)) {
       return { announced: false, stopped: false, remaining: remaining };
@@ -254,6 +286,42 @@
     return { announced: true, digit: remaining, stopped: false, remaining: remaining };
   }
 
+  function playGoCue(onDone, hooks) {
+    if (goPlayed) {
+      if (typeof onDone === 'function') onDone();
+      return { played: false, duplicate: true };
+    }
+    goPlayed = true;
+    if (hooks && typeof hooks.speak === 'function') {
+      hooks.speak('Go');
+      if (typeof onDone === 'function') {
+        goCallbackTimer = setTimeout(onDone, 650);
+      }
+      return { played: true, digit: 'Go' };
+    }
+    if (!audioUnlocked) preloadClips();
+    resumeAudioContext();
+    var clip = null;
+    var done = function () {
+      clearGoCallbackTimer();
+      if (typeof onDone === 'function') onDone();
+    };
+    playClipKey(GO_KEY, getGoClipSrc(), 'Go').then(function () {
+      clip = clipCache[GO_KEY] || null;
+      if (clip && typeof clip.addEventListener === 'function') {
+        var onEnded = function () {
+          clip.removeEventListener('ended', onEnded);
+          done();
+        };
+        clip.addEventListener('ended', onEnded);
+        goCallbackTimer = setTimeout(done, 900);
+      } else {
+        goCallbackTimer = setTimeout(done, 700);
+      }
+    });
+    return { played: true, digit: 'Go' };
+  }
+
   bindGlobalUnlockOnce();
 
   global.MyFitRestAudio = {
@@ -262,10 +330,12 @@
     resetCountdownAudio: resetCountdownAudio,
     stopRestCountdownAudio: stopRestCountdownAudio,
     speakCountdownDigit: speakCountdownDigit,
+    playGoCue: playGoCue,
     unlockRestAudio: unlockRestAudio,
     isStandalonePwa: isStandalonePwa,
     _debugLastAnnounced: function () { return lastAnnouncedSecond; },
     _isUnlocked: function () { return audioUnlocked; },
-    _hasBuffer: function (digit) { return !!bufferCache[digit]; }
+    _hasBuffer: function (key) { return !!bufferCache[key]; },
+    _goPlayed: function () { return goPlayed; }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

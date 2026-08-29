@@ -1061,16 +1061,27 @@
     var remaining = Math.max(0, Math.ceil((new Date(activeSession.restEndTime).getTime() - Date.now()) / 1000));
     activeSession.restRemaining = remaining;
     updateRestDisplay(remaining);
-    if (window.MyFitRestAudio) window.MyFitRestAudio.handleRestCountdownTick(remaining);
+    if (remaining > 0) {
+      if (window.MyFitRestAudio) window.MyFitRestAudio.handleRestCountdownTick(remaining);
+      persistSession();
+      return;
+    }
     persistSession();
-    if (remaining <= 0) finishRestAdvance();
+    clearRestTimer();
+    if (window.MyFitRestAudio && window.MyFitRestAudio.playGoCue) {
+      window.MyFitRestAudio.playGoCue(finishRestAdvance);
+    } else {
+      finishRestAdvance();
+    }
   }
 
   function skipRest() {
     if (!activeSession) return;
     if (window.MyFitRestAudio) window.MyFitRestAudio.stopRestCountdownAudio();
+    clearRestTimer();
     activeSession.restEndTime = new Date().toISOString();
-    tickRest();
+    activeSession.restRemaining = 0;
+    finishRestAdvance();
   }
 
   function addRestSeconds() {

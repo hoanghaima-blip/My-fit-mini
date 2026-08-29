@@ -1,15 +1,15 @@
-const CACHE_NAME = 'my-fit-mini-v32';
-const APP_VERSION = '32';
+const CACHE_NAME = 'my-fit-mini-v33';
+const APP_VERSION = '33';
 
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './styles.css?v=32',
-  './data.js?v=32',
-  './images.js?v=32',
-  './rest-audio.js?v=32',
-  './app.js?v=32',
+  './styles.css?v=33',
+  './data.js?v=33',
+  './images.js?v=33',
+  './rest-audio.js?v=33',
+  './app.js?v=33',
   './styles.css',
   './data.js',
   './images.js',
@@ -21,6 +21,7 @@ const ASSETS = [
   './assets/audio/count-3.mp3',
   './assets/audio/count-4.mp3',
   './assets/audio/count-5.mp3',
+  './assets/audio/count-go.mp3',
   './assets/logo-header.png',
   './assets/logo-mau-6.png',
   './assets/leg-curl-machine.jpg',

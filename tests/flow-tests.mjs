@@ -615,10 +615,10 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v20'), 'service worker cache v20');
+    assert(sw.includes('my-fit-mini-v21'), 'service worker cache v21');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v20 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v21 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }

@@ -14,9 +14,9 @@
 /* Force one-time PWA cache refresh when UI version changes.
    Preserves workout/history localStorage and IndexedDB image data. */
 (function () {
-  var EXPECTED = '20';
+  var EXPECTED = '21';
   var VERSION_KEY = 'myfit-ui-version';
-  var RELOAD_KEY = 'myfit-ui-reload-v20';
+  var RELOAD_KEY = 'myfit-ui-reload-v21';
   try {
     var current = localStorage.getItem(VERSION_KEY);
     if (current === EXPECTED) return;

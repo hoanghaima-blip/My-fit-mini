@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="37"'), 'version meta is 37');
-    assert(html.includes('data.js?v=37'), 'script cache bust v37');
+    assert(html.includes('myfit-version" content="38"'), 'version meta is 38');
+    assert(html.includes('data.js?v=38'), 'script cache bust v38');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v37'), 'service worker cache v37');
-    assert(sw.includes('APP_VERSION = \'37\''), 'service worker APP_VERSION v37');
+    assert(sw.includes('my-fit-mini-v38'), 'service worker cache v38');
+    assert(sw.includes('APP_VERSION = \'38\''), 'service worker APP_VERSION v38');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v37 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v38 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -691,8 +691,8 @@ async function run() {
           exercise.name + ' catalog fallback works without IndexedDB'
         );      }
     }
-    assert(total === 15, 'checked all 15 default exercises, got ' + total);
-    assert(Object.keys(D.EXERCISE_IMAGE_ASSETS).length >= 15, 'catalog has at least 15 entries');
+    assert(total === 17, 'checked all 17 default exercises, got ' + total);
+    assert(Object.keys(D.EXERCISE_IMAGE_ASSETS).length >= 17, 'catalog has at least 17 entries');
     // SW precaches exercise assets
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
     assert((sw.match(/assets\/exercises\//g) || []).length >= 15, 'SW caches exercise images');
@@ -995,7 +995,7 @@ async function run() {
     ['a', 'b', 'c'].forEach((wid) => {
       workouts[wid].exercises.forEach((ex) => scheduleNames.push(ex.name));
     });
-    assert(library.exercises.length === 17, 'library contains all schedule + extras');
+    assert(library.exercises.length === 20, 'library contains all schedule + extras');
     scheduleNames.forEach((name) => {
       assert(library.exercises.some((ex) => ex.name === name), 'library has schedule exercise: ' + name);
     });
@@ -1015,7 +1015,7 @@ async function run() {
     // reload preserves synced library
     const second = loadApp();
     const lib2 = second.window.MyFitData.loadLibrary(second.window.MyFitApp.getWorkouts());
-    assert(lib2.exercises.length === 17, 'library persists after reload');
+    assert(lib2.exercises.length === 20, 'library persists after reload');
     assert(lib2.exercises.some((ex) => /Master Lat Pulldown|Lat Pulldown/.test(ex.name)), 'master name persisted');
 
     // supplemental library session history
@@ -1717,6 +1717,124 @@ async function run() {
     pass('TEST 32: large upload persists via imageId without bloating localStorage');
   } catch (err) {
     fail('TEST 32', err);
+  }
+
+  // TEST 33: T4 Lưng + Vai — 6 exercises, b1/b2 preserved, b3–b6 specs + migration
+  try {
+    resetStorage();
+    const fresh = loadApp();
+    const D = fresh.window.MyFitData;
+    const workouts = D.loadWorkouts();
+    const b = workouts.b;
+
+    assert(b.title === '💪 Lưng + Vai', 'T4 title is Lưng + Vai');
+    assert(b.exercises.length === 6, 'T4 has exactly 6 exercises');
+
+    assert(b.exercises[0].id === 'b-lat-pulldown', 'bài 1 id unchanged');
+    assert(b.exercises[0].name === 'Lat Pulldown', 'bài 1 name unchanged');
+    assert(b.exercises[1].id === 'b-seated-cable-row', 'bài 2 id unchanged');
+    assert(b.exercises[1].name === 'Seated Cable Row', 'bài 2 name unchanged');
+
+    const b3 = b.exercises[2];
+    const b4 = b.exercises[3];
+    const b5 = b.exercises[4];
+    const b6 = b.exercises[5];
+
+    assert(b3.id === 'b-rope-pull-to-belly', 'bài 3 id');
+    assert(b3.name === 'Kéo dây thừng về bụng – khuỷu khép', 'bài 3 name');
+    assert(b3.sets === 3 && b3.reps === 25 && b3.resistance === 12.5 && b3.resistanceType === 'kg', 'bài 3 specs');
+    assert(/KHÉP|khép/.test(b3.instructions), 'bài 3 instructions mention elbows close');
+
+    assert(b4.id === 'b-rope-pull-to-chest', 'bài 4 id');
+    assert(b4.name === 'Kéo dây thừng về ngực – khuỷu mở', 'bài 4 name');
+    assert(b4.sets === 3 && b4.reps === 25 && b4.resistance === 12.5 && b4.resistanceType === 'kg', 'bài 4 specs');
+    assert(/MỞ SANG HAI BÊN|mở sang hai bên/i.test(b4.instructions), 'bài 4 instructions mention elbows open');
+
+    assert(b5.id === 'b-incline-y-raise', 'bài 5 id');
+    assert(b5.name === 'Nâng tạ chữ Y trên ghế dốc', 'bài 5 name');
+    assert(b5.sets === 3 && b5.reps === 20 && b5.resistance === 2 && b5.resistanceType === 'kg', 'bài 5 specs');
+    assert(/CHỮ Y|chữ Y/.test(b5.instructions), 'bài 5 instructions mention Y shape');
+    assert(/bench|ghế/i.test(b5.instructions), 'bài 5 instructions mention incline bench');
+
+    assert(b6.id === 'b-dumbbell-6-way-raise', 'bài 6 id');
+    assert(b6.name === 'Nâng tạ 6 hướng', 'bài 6 name');
+    assert(b6.sets === 3 && b6.reps === 20 && b6.resistance === 1 && b6.resistanceType === 'kg', 'bài 6 specs');
+    assert(/SANG NGANG/.test(b6.instructions), 'bài 6 step: ngang');
+    assert(/TRƯỚC MẶT/.test(b6.instructions), 'bài 6 step: trước mặt');
+    assert(/TRÊN ĐẦU/.test(b6.instructions), 'bài 6 step: trên đầu');
+
+    // legacy 4-exercise T4 migrates while preserving b1/b2 + custom image on new slot
+    const legacy = {
+      b: {
+        id: 'b',
+        title: '💪 Upper Body',
+        exercises: [
+          b.exercises[0],
+          b.exercises[1],
+          {
+            id: 'b-dumbbell-shoulder-press',
+            name: 'Dumbbell Shoulder Press',
+            image: 'assets/exercises/dumbbell-shoulder-press.jpg',
+            imageId: '',
+            instructions: 'old',
+            notes: '',
+            sets: 3,
+            reps: 10,
+            resistance: 5,
+            resistanceType: 'kg'
+          },
+          {
+            id: 'b-lateral-raise',
+            name: 'Lateral Raise',
+            image: 'assets/exercises/lateral-raise.jpg',
+            imageId: '',
+            instructions: 'old',
+            notes: '',
+            sets: 3,
+            reps: 15,
+            resistance: 2,
+            resistanceType: 'kg'
+          }
+        ]
+      }
+    };
+    sharedStorage.set('myfit-workouts-v2', JSON.stringify(legacy));
+    fresh.dom.window.close();
+
+    const migrated = loadApp();
+    const Mb = migrated.window.MyFitData;
+    const after = Mb.loadWorkouts().b;
+    assert(after.exercises.length === 6, 'legacy T4 migrates to 6 exercises');
+    assert(after.title === '💪 Lưng + Vai', 'legacy T4 title updated');
+    assert(after.exercises[0].name === 'Lat Pulldown', 'legacy migration preserves bài 1');
+    assert(after.exercises[1].name === 'Seated Cable Row', 'legacy migration preserves bài 2');
+    assert(after.exercises[2].id === 'b-rope-pull-to-belly', 'legacy migration sets bài 3');
+    assert(after.exercises[3].id === 'b-rope-pull-to-chest', 'legacy migration sets bài 4');
+
+    // custom imageId on bài 3 survives migration re-run
+    after.exercises[2].imageId = 'img-t4-belly-custom';
+    after.exercises[2].image = '';
+    sharedStorage.set('myfit-workouts-v2', JSON.stringify({ b: after, a: Mb.loadWorkouts().a, c: Mb.loadWorkouts().c }));
+    migrated.dom.window.close();
+
+    const reloaded = loadApp();
+    const belly = reloaded.window.MyFitData.loadWorkouts().b.exercises[2];
+    assert(belly.imageId === 'img-t4-belly-custom', 'custom imageId on bài 3 preserved after migration');
+    assert(belly.sets === 3 && belly.reps === 25 && belly.resistance === 12.5, 'bài 3 specs kept after custom image');
+
+    // library includes T4 schedule exercises by same identity
+    const lib = reloaded.window.MyFitData.loadLibrary(reloaded.window.MyFitApp.getWorkouts());
+    assert(lib.exercises.some((ex) => ex.id === 'b-rope-pull-to-belly'), 'library has bài 3 from schedule');
+    assert(lib.exercises.some((ex) => ex.id === 'b-dumbbell-6-way-raise'), 'library has bài 6 from schedule');
+
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
+    assert(html.includes('Thêm vào T4 · Lưng + Vai'), 'schedule add button uses Lưng + Vai label');
+    assert(!html.includes('Thêm vào T4 · Upper Body'), 'old Upper Body label removed');
+
+    reloaded.dom.window.close();
+    pass('TEST 33: T4 Lưng + Vai six-exercise program + migration preserves head/custom image');
+  } catch (err) {
+    fail('TEST 33', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

@@ -248,6 +248,10 @@
     'a-extended-range-side-lying-hip-abduction-on-bench': 'assets/exercises/side-lying-hip-abduction.jpg',
     'b-lat-pulldown': 'assets/exercises/lat-pulldown.jpg',
     'b-seated-cable-row': 'assets/exercises/seated-cable-row.jpg',
+    'b-rope-pull-to-belly': 'assets/exercises/seated-cable-row.jpg',
+    'b-rope-pull-to-chest': 'assets/exercises/face-pull.jpg',
+    'b-incline-y-raise': 'assets/exercises/lateral-raise.jpg',
+    'b-dumbbell-6-way-raise': 'assets/exercises/lateral-raise.jpg',
     'b-dumbbell-shoulder-press': 'assets/exercises/dumbbell-shoulder-press.jpg',
     'b-lateral-raise': 'assets/exercises/lateral-raise.jpg',
     'c-hip-thrust': 'assets/exercises/hip-thrust.jpg',
@@ -273,6 +277,10 @@
     'extended range side-lying hip abduction on bench': 'assets/exercises/side-lying-hip-abduction.jpg',
     'lat pulldown': 'assets/exercises/lat-pulldown.jpg',
     'seated cable row': 'assets/exercises/seated-cable-row.jpg',
+    'kéo dây thừng về bụng – khuỷu khép': 'assets/exercises/seated-cable-row.jpg',
+    'kéo dây thừng về ngực – khuỷu mở': 'assets/exercises/face-pull.jpg',
+    'nâng tạ chữ y trên ghế dốc': 'assets/exercises/lateral-raise.jpg',
+    'nâng tạ 6 hướng': 'assets/exercises/lateral-raise.jpg',
     'dumbbell shoulder press': 'assets/exercises/dumbbell-shoulder-press.jpg',
     'lateral raise': 'assets/exercises/lateral-raise.jpg',
     'hip thrust': 'assets/exercises/hip-thrust.jpg',
@@ -344,6 +352,91 @@
     };
   }
 
+  function createT4RopePullToBelly() {
+    return {
+      id: 'b-rope-pull-to-belly',
+      name: 'Kéo dây thừng về bụng – khuỷu khép',
+      image: EXERCISE_IMAGE_ASSETS['b-rope-pull-to-belly'],
+      imageId: '',
+      instructions:
+        'Ngồi/đứng đúng vị trí theo video minh hoạ. Hai tay nắm dây thừng (rope attachment). ' +
+        'Kéo dây thừng về phía BỤNG. Khi kéo: khuỷu tay đi về phía sau và nằm ngang với thân/lưng. ' +
+        'Khuỷu tay KHÉP, áp sát thân người. Khi trả dây: đưa tay ra dài về phía trước để lưng được GIÃN HẾT biên độ trước khi kéo lại.',
+      notes: 'Cable/máy kéo · dây thừng · 12.5 kg',
+      sets: 3,
+      reps: 25,
+      resistance: 12.5,
+      resistanceType: 'kg'
+    };
+  }
+
+  function createT4RopePullToChest() {
+    return {
+      id: 'b-rope-pull-to-chest',
+      name: 'Kéo dây thừng về ngực – khuỷu mở',
+      image: EXERCISE_IMAGE_ASSETS['b-rope-pull-to-chest'],
+      imageId: '',
+      instructions:
+        'Hai tay nắm dây thừng. Kéo dây về phía NGỰC. Khi kéo, hai khuỷu tay MỞ SANG HAI BÊN. ' +
+        'Tập trung vào lưng trên/vùng giữa hai bả vai. Trả dây có kiểm soát.',
+      notes: 'Cable/máy kéo · dây thừng · 12.5 kg',
+      sets: 3,
+      reps: 25,
+      resistance: 12.5,
+      resistanceType: 'kg'
+    };
+  }
+
+  function createT4InclineYRaise() {
+    return {
+      id: 'b-incline-y-raise',
+      name: 'Nâng tạ chữ Y trên ghế dốc',
+      image: EXERCISE_IMAGE_ASSETS['b-incline-y-raise'],
+      imageId: '',
+      instructions:
+        'Nằm úp người trên ghế bench dựng chéo. Hai tay cầm 2 tạ đơn (2 kg mỗi tay). ' +
+        'Từ vị trí tay thấp, đưa hai tay lên tạo thành hình CHỮ Y so với thân người. Hạ xuống có kiểm soát rồi lặp lại.',
+      notes: 'Bench dựng chéo · 2 kg/tay',
+      sets: 3,
+      reps: 20,
+      resistance: 2,
+      resistanceType: 'kg'
+    };
+  }
+
+  function createT4Dumbbell6WayRaise() {
+    return {
+      id: 'b-dumbbell-6-way-raise',
+      name: 'Nâng tạ 6 hướng',
+      image: EXERCISE_IMAGE_ASSETS['b-dumbbell-6-way-raise'],
+      imageId: '',
+      instructions:
+        'MỘT ĐỘNG TÁC LIÊN TỤC — giữ đúng thứ tự mỗi rep:\n' +
+        '1) Hai tay cầm tạ ở hai bên thân\n' +
+        '2) Đưa hai tay SANG NGANG\n' +
+        '3) Từ ngang, đưa hai tay RA TRƯỚC MẶT\n' +
+        '4) Từ trước mặt, đưa hai tay LÊN THẲNG TRÊN ĐẦU\n' +
+        '5) Hạ tay từ trên đầu RA TRƯỚC MẶT\n' +
+        '6) Đưa tay trở lại vị trí NGANG\n' +
+        '7) Hạ tạ xuống hai bên thân\n' +
+        'Hoàn thành cả chuỗi mới tính 1 rep.',
+      notes: '2 tạ đơn · 1 kg/tay',
+      sets: 3,
+      reps: 20,
+      resistance: 1,
+      resistanceType: 'kg'
+    };
+  }
+
+  function defaultWorkoutBExercisesTail() {
+    return [
+      createT4RopePullToBelly(),
+      createT4RopePullToChest(),
+      createT4InclineYRaise(),
+      createT4Dumbbell6WayRaise()
+    ];
+  }
+
   var DEFAULT_WORKOUTS = {
     a: {
       id: 'a',
@@ -359,13 +452,11 @@
     },
     b: {
       id: 'b',
-      title: '💪 Upper Body',
+      title: '💪 Lưng + Vai',
       exercises: [
         createExercise('b', ['Lat Pulldown', '3 × 10–12', 'Vừa', 'Kéo khuỷu tay xuống, không nhún vai.']),
-        createExercise('b', ['Seated Cable Row', '3 × 10–12', 'Vừa', 'Giữ ngực mở, kéo khuỷu tay về sau.']),
-        createExercise('b', ['Dumbbell Shoulder Press', '3 × 10–12', 'Nhẹ–vừa', 'Giữ cổ tay trung lập.']),
-        createExercise('b', ['Lateral Raise', '3 × 12–15', '1–3 kg', 'Nâng đến khoảng ngang vai, không vung tạ.'])
-      ]
+        createExercise('b', ['Seated Cable Row', '3 × 10–12', 'Vừa', 'Giữ ngực mở, kéo khuỷu tay về sau.'])
+      ].concat(defaultWorkoutBExercisesTail())
     },
     c: {
       id: 'c',
@@ -571,6 +662,88 @@
     return { workouts: workouts, changed: changed };
   }
 
+  function mergeTailExercisePreservingImage(existing, defaults) {
+    var next = clone(defaults);
+    if (!existing || existing.id !== defaults.id) return next;
+    var imageFields = pickExerciseImageFields(existing, defaults);
+    next.image = imageFields.image;
+    next.imageId = imageFields.imageId;
+    return next;
+  }
+
+  function isWorkoutBBackShoulderSix(exercises) {
+    if (!exercises || exercises.length !== 6) return false;
+    var tailIds = ['b-rope-pull-to-belly', 'b-rope-pull-to-chest', 'b-incline-y-raise', 'b-dumbbell-6-way-raise'];
+    if (exercises[0].id !== 'b-lat-pulldown' || exercises[1].id !== 'b-seated-cable-row') return false;
+    var i;
+    for (i = 0; i < 4; i += 1) {
+      if (exercises[2 + i].id !== tailIds[i]) return false;
+    }
+    return true;
+  }
+
+  function exerciseContentMatches(exercise, defaults) {
+    var a = clone(exercise);
+    var b = clone(defaults);
+    delete a.image;
+    delete a.imageId;
+    delete b.image;
+    delete b.imageId;
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  // T4: keep Lat Pulldown + Seated Cable Row; replace bài 3–6 with Lưng + Vai program.
+  function migrateWorkoutBBackShoulderSix(workouts) {
+    if (!workouts || !workouts.b || !Array.isArray(workouts.b.exercises)) {
+      return { workouts: workouts, changed: false };
+    }
+    var exercises = workouts.b.exercises;
+    var tailDefaults = defaultWorkoutBExercisesTail();
+    var title = '💪 Lưng + Vai';
+    var changed = false;
+
+    if (workouts.b.title !== title) {
+      workouts.b.title = title;
+      changed = true;
+    }
+
+    var head0 =
+      exercises[0] && exercises[0].id === 'b-lat-pulldown'
+        ? exercises[0]
+        : createExercise('b', ['Lat Pulldown', '3 × 10–12', 'Vừa', 'Kéo khuỷu tay xuống, không nhún vai.']);
+    var head1 =
+      exercises[1] && exercises[1].id === 'b-seated-cable-row'
+        ? exercises[1]
+        : createExercise('b', ['Seated Cable Row', '3 × 10–12', 'Vừa', 'Giữ ngực mở, kéo khuỷu tay về sau.']);
+
+    if (exercises[0] !== head0 || exercises[1] !== head1) changed = true;
+
+    var newTail = tailDefaults.map(function (def, idx) {
+      return mergeTailExercisePreservingImage(exercises[2 + idx], def);
+    });
+
+    if (!isWorkoutBBackShoulderSix(exercises)) {
+      changed = true;
+    } else {
+      var j;
+      for (j = 2; j < 6; j += 1) {
+        if (
+          !exerciseContentMatches(exercises[j], tailDefaults[j - 2]) ||
+          exercises[j].image !== newTail[j - 2].image ||
+          exercises[j].imageId !== newTail[j - 2].imageId
+        ) {
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    if (changed) {
+      workouts.b.exercises = [head0, head1].concat(newTail);
+    }
+    return { workouts: workouts, changed: changed };
+  }
+
   function loadWorkouts() {
     var stored = readJson(STORAGE_KEYS.workouts, null);
     var migrated = migrateLegacyWorkouts(stored);
@@ -579,9 +752,13 @@
     workouts = legCurlResult.workouts;
     var rdlResult = migrateGlutesARemoveRomanianDeadlift(workouts);
     workouts = rdlResult.workouts;
+    var t4Result = migrateWorkoutBBackShoulderSix(workouts);
+    workouts = t4Result.workouts;
     var imageResult = migrateExerciseAssetImages(workouts);
     workouts = imageResult.workouts;
-    if (legCurlResult.changed || rdlResult.changed || imageResult.changed || !stored) saveWorkouts(workouts);
+    if (legCurlResult.changed || rdlResult.changed || t4Result.changed || imageResult.changed || !stored) {
+      saveWorkouts(workouts);
+    }
     return workouts;
   }
 

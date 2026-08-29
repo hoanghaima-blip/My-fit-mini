@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
-<meta name="myfit-version" content="37">
+<meta name="myfit-version" content="38">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=37">
-<link rel="icon" href="assets/icon-192.png?v=37">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=37">
+<link rel="stylesheet" href="styles.css?v=38">
+<link rel="icon" href="assets/icon-192.png?v=38">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=38">
 <title>My Fit Mini</title>
 <script>
 /* Force one-time PWA cache refresh when UI version changes.
@@ -16,7 +16,7 @@
 (function () {
   var EXPECTED = '37';
   var VERSION_KEY = 'myfit-ui-version';
-  var RELOAD_KEY = 'myfit-ui-reload-v37';
+  var RELOAD_KEY = 'myfit-ui-reload-v38';
   try {
     var current = localStorage.getItem(VERSION_KEY);
     if (current === EXPECTED) return;
@@ -196,7 +196,7 @@
     <h2>Thêm vào lịch tập</h2>
     <p class="library-intro">Chọn buổi T2 / T4 / T6 để thêm bài vào giáo án cố định.</p>
     <button type="button" class="btn" data-add-schedule="a">Thêm vào T2 · Glutes A</button>
-    <button type="button" class="btn-secondary" data-add-schedule="b">Thêm vào T4 · Upper Body</button>
+    <button type="button" class="btn-secondary" data-add-schedule="b">Thêm vào T4 · Lưng + Vai</button>
     <button type="button" class="btn-secondary" data-add-schedule="c">Thêm vào T6 · Glutes B</button>
   </div>
 </div>
@@ -339,9 +339,9 @@
   </div>
 </div>
 
-<script src="data.js?v=37"></script>
-<script src="images.js?v=37"></script>
-<script src="rest-audio.js?v=37"></script>
-<script src="app.js?v=37"></script>
+<script src="data.js?v=38"></script>
+<script src="images.js?v=38"></script>
+<script src="rest-audio.js?v=38"></script>
+<script src="app.js?v=38"></script>
 </body>
 </html>

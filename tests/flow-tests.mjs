@@ -601,7 +601,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="26"'), 'version meta is 26');
+    assert(html.includes('myfit-version" content="27"'), 'version meta is 27');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -615,11 +615,11 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v26'), 'service worker cache v26');
+    assert(sw.includes('my-fit-mini-v27'), 'service worker cache v27');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v26 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v27 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1195,6 +1195,111 @@ async function run() {
     pass('TEST 27: reorder navigation + history persistence + welcome palette');
   } catch (err) {
     fail('TEST 27', err);
+  }
+
+  // Rest-screen "+ Chọn bài" navigation (CASE A–E)
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const app = window.MyFitApp;
+    const doc = window.document;
+    const css = readFileSync(join(root, 'styles.css'), 'utf8');
+    const workout = D.loadWorkouts().a;
+
+    app.setActiveSession(null);
+    app.selectWorkout('a');
+    app.startWorkout(0);
+    let session = app.getActiveSession();
+    assert(workout.exercises.length >= 5, 'workout has at least 5 exercises');
+
+    // CASE A: "Bài tiếp theo" after exercise 1 rest -> exercise 2
+    session.exercises[0].completionStatus = 'completed';
+    D.assignActualOrder(session, session.exercises[0]);
+    session.currentExerciseIndex = 0;
+    session.phase = 'rest-exercise';
+    session.restKind = 'exercise';
+    app.finishRestAdvance();
+    session = app.getActiveSession();
+    assert(session.currentExerciseIndex === 1, 'CASE A: next default is exercise 2');
+    assert(session.phase === 'exercise', 'CASE A: enters exercise view');
+
+    // CASE B: pick exercise 5 from exercise rest
+    app.setActiveSession(null);
+    app.startWorkout(0);
+    session = app.getActiveSession();
+    session.exercises[0].completionStatus = 'completed';
+    D.assignActualOrder(session, session.exercises[0]);
+    session.currentExerciseIndex = 0;
+    session.phase = 'rest-exercise';
+    session.restKind = 'exercise';
+    const catalog = app.getExerciseCatalog();
+    const ex5Master = catalog.find((ex) => ex.id === workout.exercises[4].id);
+    assert(ex5Master, 'CASE B: exercise 5 in shared catalog');
+    app.pickExerciseForSession(ex5Master, { jumpNow: true });
+    session = app.getActiveSession();
+    assert(session.currentExerciseIndex === 4, 'CASE B: jumped to exercise 5');
+    assert(session.phase === 'exercise', 'CASE B: starts exercise 5');
+    assert(session.exercises[4].snapshot.name === ex5Master.name, 'CASE B: uses catalog exercise data');
+
+    // CASE C: no "+ Chọn bài" during active sets or set rest
+    app.setActiveSession(null);
+    app.startWorkout(0);
+    session = app.getActiveSession();
+    session.phase = 'exercise';
+    session.currentSet = 2;
+    app.updateRestActions();
+    assert(doc.getElementById('rest-pick-exercise-btn').hidden, 'CASE C: hidden while exercising');
+    session.phase = 'rest-set';
+    session.restKind = 'set';
+    app.updateRestActions();
+    assert(doc.getElementById('rest-pick-exercise-btn').hidden, 'CASE C: hidden during set rest');
+    assert(/\.workout-pick-btn\{[^}]*display:none/.test(css), 'CASE C: workout pick hidden on set screen');
+
+    // CASE D: exercise rest shows working pick overlay with shared catalog
+    session.phase = 'rest-exercise';
+    session.restKind = 'exercise';
+    app.updateRestActions();
+    assert(!doc.getElementById('rest-pick-exercise-btn').hidden, 'CASE D: pick visible on exercise rest');
+    app.openPickExerciseForSession({ jumpAfterInsert: true, fromRest: true });
+    assert(doc.getElementById('pick-exercise-overlay').style.display === 'flex', 'CASE D: pick overlay opens above rest');
+    assert(doc.getElementById('pick-exercise-list').innerHTML.includes('Chọn bài này'), 'CASE D: pick list populated');
+    assert(css.includes('#pick-exercise-overlay{z-index:35}'), 'CASE D: pick overlay z-index above rest screen');
+    assert(catalog.length >= workout.exercises.length, 'CASE D: catalog includes schedule exercises');
+    app.closePickExercise();
+    assert(session.phase === 'rest-exercise', 'CASE D: closing pick keeps exercise rest running');
+
+    // CASE E: after manual pick, "Bài tiếp theo" still follows default schedule order
+    session.exercises[0].completionStatus = 'completed';
+    D.assignActualOrder(session, session.exercises[0]);
+    session.exercises[4].completionStatus = 'completed';
+    D.assignActualOrder(session, session.exercises[4]);
+    session.currentExerciseIndex = 4;
+    session.phase = 'rest-exercise';
+    session.restKind = 'exercise';
+    app.finishRestAdvance();
+    session = app.getActiveSession();
+    assert(session.currentExerciseIndex === 1, 'CASE E: default next is exercise 2 after manual detour');
+    assert(session.exercises[1].completionStatus !== 'completed', 'CASE E: exercise 2 still pending');
+
+    // Supplemental: pick exercise not in today's session list
+    const latPulldown = catalog.find((ex) => /lat pulldown/i.test(ex.name));
+    assert(latPulldown, 'upper-body exercise in shared catalog');
+    assert(!session.exercises.some((item) => item.snapshot.id === latPulldown.id), 'not already in session');
+    session.currentExerciseIndex = 1;
+    session.phase = 'rest-exercise';
+    session.restKind = 'exercise';
+    const beforeLen = session.exercises.length;
+    app.pickExerciseForSession(latPulldown, { jumpNow: true });
+    session = app.getActiveSession();
+    assert(session.exercises.length === beforeLen + 1, 'supplemental inserted for ad-hoc pick');
+    assert(session.exercises[session.currentExerciseIndex].role === 'supplemental', 'jumped into supplemental exercise');
+    assert(session.exercises[session.currentExerciseIndex].snapshot.name === latPulldown.name, 'supplemental uses catalog data');
+
+    pass('TEST 28: rest pick exercise navigation CASE A–E');
+    dom.window.close();
+  } catch (err) {
+    fail('TEST 28', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

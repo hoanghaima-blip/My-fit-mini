@@ -825,13 +825,20 @@
     showHome();
   }
 
+  function getExerciseCatalog() {
+    syncExerciseCatalog();
+    return (library && library.exercises) ? library.exercises.slice() : [];
+  }
+
   function openPickExerciseForSession(options) {
     options = options || {};
     pickMode = 'session';
     pickJumpAfterInsert = !!options.jumpAfterInsert;
     if (els.pickExerciseTitle) els.pickExerciseTitle.textContent = 'Chọn bài';
     if (els.pickExerciseIntro) {
-      els.pickExerciseIntro.textContent = 'Bài được chọn sẽ thêm vào buổi tập hiện tại (bài bổ sung). Lịch cố định không thay đổi.';
+      els.pickExerciseIntro.textContent = options.fromRest
+        ? 'Chọn bất kỳ bài trong thư viện để tập tiếp. Đóng lại nếu muốn dùng "Bài tiếp theo".'
+        : 'Chọn bài từ thư viện chung của app.';
     }
     renderPickExerciseList();
     showOverlay(els.pickExerciseOverlay);
@@ -845,9 +852,9 @@
 
   function renderPickExerciseList() {
     if (!els.pickExerciseList) return;
-    var exercises = (library && library.exercises) || [];
+    var exercises = getExerciseCatalog();
     if (!exercises.length) {
-      els.pickExerciseList.innerHTML = '<div class="pick-empty">Thư viện trống. Hãy thêm bài ở “Tập theo bài”.</div>';
+      els.pickExerciseList.innerHTML = '<div class="pick-empty">Chưa có bài tập. Hãy thêm bài ở “Tập theo bài”.</div>';
       return;
     }
     els.pickExerciseList.innerHTML = exercises.map(function (exercise, index) {
@@ -891,10 +898,15 @@
       activeSession = D.createWorkoutSession(workout);
       jumpNow = true;
     }
-    var existingIdx = D.findSessionExerciseIndex(activeSession, exercise);
+    var catalogExercise = D.clone(exercise);
+    var existingIdx = D.findSessionExerciseIndex(activeSession, catalogExercise);
     if (existingIdx >= 0) {
       var existing = activeSession.exercises[existingIdx];
       if (existing.completionStatus !== 'completed') {
+        if ((existing.actualSetsCompleted || 0) === 0) {
+          existing.snapshot = D.clone(catalogExercise);
+          D.ensureSetLogs(existing);
+        }
         closePickExercise();
         if (jumpNow) jumpToExerciseIndex(existingIdx);
         else persistSession();
@@ -902,7 +914,7 @@
         return;
       }
     }
-    insertSupplementalExercise(exercise, { jumpNow: jumpNow });
+    insertSupplementalExercise(catalogExercise, { jumpNow: jumpNow });
   }
 
   function insertSupplementalExercise(exercise, options) {
@@ -960,8 +972,7 @@
   }
 
   function updateWorkoutPickButton() {
-    if (!els.workoutPickBtn || !activeSession) return;
-    els.workoutPickBtn.hidden = activeSession.phase !== 'exercise' && activeSession.phase !== 'rest-exercise';
+    if (els.workoutPickBtn) els.workoutPickBtn.hidden = true;
   }
 
   function hasOtherIncompleteExercises(session, currentIndex) {
@@ -1375,7 +1386,8 @@
       els.pickExerciseList.addEventListener('click', function (event) {
         var btn = event.target.closest('[data-pick-index]');
         if (!btn) return;
-        var exercise = library.exercises[parseInt(btn.dataset.pickIndex, 10)];
+        var catalog = getExerciseCatalog();
+        var exercise = catalog[parseInt(btn.dataset.pickIndex, 10)];
         if (!exercise) return;
         if (pickMode === 'session') pickExerciseForSession(exercise);
       });
@@ -1419,12 +1431,12 @@
     document.getElementById('workout-close-btn').addEventListener('click', closeWorkout);
     if (els.workoutPickBtn) {
       els.workoutPickBtn.addEventListener('click', function () {
-        openPickExerciseForSession({ jumpAfterInsert: false });
+        openPickExerciseForSession({ jumpAfterInsert: false, fromRest: false });
       });
     }
     if (els.restPickBtn) {
       els.restPickBtn.addEventListener('click', function () {
-        openPickExerciseForSession({ jumpAfterInsert: true });
+        openPickExerciseForSession({ jumpAfterInsert: true, fromRest: true });
       });
     }
     document.getElementById('rest-skip-btn').addEventListener('click', skipRest);
@@ -1515,6 +1527,10 @@
     addExerciseToActiveSession: addExerciseToActiveSession,
     insertSupplementalExercise: insertSupplementalExercise,
     pickExerciseForSession: pickExerciseForSession,
+    openPickExerciseForSession: openPickExerciseForSession,
+    closePickExercise: closePickExercise,
+    getExerciseCatalog: getExerciseCatalog,
+    updateRestActions: updateRestActions,
     jumpToExerciseIndex: jumpToExerciseIndex,
     openResistanceHistory: openResistanceHistory,
     startLibraryExercise: startLibraryExercise

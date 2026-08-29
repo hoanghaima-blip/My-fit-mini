@@ -55,7 +55,8 @@ html.welcome-active,html.welcome-active body{background:#ebe4da}
 .resistance-history-content{margin-top:12px;max-height:60vh;overflow:auto}
 .resistance-history-day{margin-bottom:14px}
 .resistance-history-date{font-size:15px;font-weight:800;color:#222;margin-bottom:4px}
-.workout-pick-btn{margin-top:0 !important;flex:0 1 auto}
+.workout-pick-btn{margin-top:0 !important;flex:0 1 auto;display:none !important}
+#pick-exercise-overlay{z-index:35}
 .rest-pick{background:#fff;color:#222;border:2px solid #222}
 .rest-pick[hidden]{display:none !important}
-.workout-actions .workout-pick-btn[hidden]{display:none !important}
+.workout-actions .workout-pick-btn,.workout-pick-btn[hidden]{display:none !important}

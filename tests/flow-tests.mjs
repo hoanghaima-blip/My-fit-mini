@@ -601,7 +601,7 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="24"'), 'version meta is 24');
+    assert(html.includes('myfit-version" content="25"'), 'version meta is 25');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -615,11 +615,11 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v24'), 'service worker cache v24');
+    assert(sw.includes('my-fit-mini-v25'), 'service worker cache v25');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v24 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v25 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1188,7 +1188,8 @@ async function run() {
     assert(css.includes('#ebe4da') || css.includes('#dccfc0') || css.includes('#5c4838'), 'welcome uses beige/brown palette');
     assert(/\.welcome-bg\{[^}]*object-fit:contain/.test(css), 'welcome-bg shows full image with contain');
     assert(css.includes('object-position:center center'), 'welcome image centered like requirement');
-    assert(css.includes('welcome-hero'), 'welcome hero centers copy over image');
+    assert(css.includes('welcome-hero'), 'welcome hero groups copy at top');
+    assert(/\.welcome-hero\{[^}]*justify-content:flex-start/.test(css), 'welcome copy aligned to top');
     assert(!css.includes('welcome-btn-primary{background:#fff;color:#222}'), 'welcome primary is not black/white');
 
     pass('TEST 27: reorder navigation + history persistence + welcome palette');

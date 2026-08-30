@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="43"'), 'version meta is 43');
-    assert(html.includes('data.js?v=43'), 'script cache bust v43');
+    assert(html.includes('myfit-version" content="44"'), 'version meta is 44');
+    assert(html.includes('data.js?v=44'), 'script cache bust v44');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v43'), 'service worker cache v43');
-    assert(sw.includes('APP_VERSION = \'43\''), 'service worker APP_VERSION v43');
+    assert(sw.includes('my-fit-mini-v44'), 'service worker cache v44');
+    assert(sw.includes('APP_VERSION = \'44\''), 'service worker APP_VERSION v44');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v43 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v44 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -2166,6 +2166,83 @@ async function run() {
     pass('TEST 38: muscle group config filter library pick edit image preserved');
   } catch (err) {
     fail('TEST 38', err);
+  }
+
+  // TEST 39: schedule edit Lat Pulldown — preserve image + muscle tags on card + reload
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const app = window.MyFitApp;
+    const Img = window.MyFitImages;
+    const doc = window.document;
+
+    app.showHome();
+    app.selectWorkout('b');
+
+    const latIdx = app.getWorkouts().b.exercises.findIndex((ex) => ex.id === 'b-lat-pulldown');
+    assert(latIdx >= 0, 'Lat Pulldown on T4 schedule');
+
+    const catalogLat = D.catalogImageForExercise({ id: 'b-lat-pulldown', name: 'Lat Pulldown' });
+    assert(catalogLat, 'Lat Pulldown catalog image exists');
+
+    const workouts = app.getWorkouts();
+    workouts.b.exercises[latIdx].imageId = 'img-lat-schedule-test';
+    workouts.b.exercises[latIdx].image = '';
+    D.saveWorkouts(workouts);
+    sharedImageMemory['img-lat-schedule-test'] = new Blob(['lat'], { type: 'image/jpeg' });
+
+    app.selectWorkout('b');
+    app.renderAll();
+    await wait(200);
+
+    app.openEdit(latIdx);
+    const editForm = doc.getElementById('edit-form');
+    editForm.elements.primaryMuscleGroup.value = 'back';
+    editForm.elements.primaryMuscleGroup.dispatchEvent(new window.Event('change', { bubbles: true }));
+    editForm.elements.secondaryMuscleGroup.value = 'lats';
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(400);
+
+    const latSaved = app.getWorkouts().b.exercises[latIdx];
+    assert(latSaved.primaryMuscleGroup === 'back', 'Lat Pulldown primary muscle saved');
+    assert(latSaved.secondaryMuscleGroup === 'lats', 'Lat Pulldown secondary muscle saved as lats id');
+    assert(latSaved.imageId === 'img-lat-schedule-test', 'Lat Pulldown imageId preserved on muscle-only edit');
+    const latSrc = await Img.resolveImageSrc(latSaved);
+    assert(String(latSrc).indexOf('blob:') === 0, 'Lat Pulldown thumbnail still resolves after edit');
+
+    app.renderAll();
+    await wait(200);
+    const cardHtml = doc.getElementById('exercise-list').innerHTML;
+    assert(cardHtml.includes('muscle-tag'), 'schedule card shows muscle tags after save');
+    assert(cardHtml.includes('Lưng'), 'schedule card shows Lưng tag');
+    assert(cardHtml.includes('Cơ xô'), 'schedule card shows Cơ xô tag');
+
+    app.openEdit(latIdx);
+    editForm.elements.primaryMuscleGroup.value = 'back';
+    editForm.elements.primaryMuscleGroup.dispatchEvent(new window.Event('change', { bubbles: true }));
+    editForm.elements.secondaryMuscleGroup.value = 'traps';
+    editForm.elements.secondaryMuscleGroup.dispatchEvent(new window.Event('change', { bubbles: true }));
+    editForm.querySelector('[data-role="muscle-leaf"]').value = 'trap_middle';
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(400);
+
+    const latTrap = app.getWorkouts().b.exercises[latIdx];
+    assert(latTrap.secondaryMuscleGroup === 'trap_middle', 'trap_middle saved as secondaryMuscleGroup id');
+    assert(latTrap.imageId === 'img-lat-schedule-test', 'imageId preserved on trap edit');
+    assert(D.getMuscleDisplayParts(latTrap).some((p) => p.label.indexOf('Trap giữa') >= 0), 'display parts include Trap giữa');
+
+    D.saveWorkouts(app.getWorkouts());
+    dom.window.close();
+    const reloaded = loadApp();
+    const latReload = reloaded.window.MyFitData.loadWorkouts().b.exercises.find((ex) => ex.id === 'b-lat-pulldown');
+    assert(latReload.imageId === 'img-lat-schedule-test', 'imageId survives reload');
+    assert(latReload.secondaryMuscleGroup === 'trap_middle', 'trap_middle survives reload');
+    reloaded.dom.window.close();
+
+    pass('TEST 39: schedule edit preserves image + muscle tags on card + reload');
+  } catch (err) {
+    fail('TEST 39', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

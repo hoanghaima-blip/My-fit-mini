@@ -94,3 +94,21 @@ html.welcome-active,html.welcome-active body{background:#ebe4da}
 .rest-pick{background:#fff;color:#222;border:2px solid #222}
 .rest-pick[hidden]{display:none !important}
 .workout-actions .workout-pick-btn,.workout-pick-btn[hidden]{display:none !important}
+
+/* Muscle group filter (library + pick modal) */
+.muscle-filter-search-wrap{margin:12px 0 10px}
+.muscle-filter-search{width:100%;border:1px solid #ddd;border-radius:14px;padding:12px 14px;font-size:16px;background:#fff}
+.muscle-filter-panel{margin:10px 0 16px}
+.muscle-filter-breadcrumb{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:13px;color:#666;margin-bottom:10px}
+.muscle-filter-breadcrumb strong{color:#222;font-weight:800}
+.muscle-filter-breadcrumb .crumb-sep{color:#bbb}
+.muscle-filter-reset{border:0;background:#eeece8;color:#222;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer}
+.muscle-filter-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.muscle-filter-chip{border:1px solid #e0ddd6;background:#fff;color:#333;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.muscle-filter-chip.active{background:#222;color:#fff;border-color:#222}
+.muscle-filter-chip.subtle{background:#f7f5f1}
+.muscle-filter-label{width:100%;font-size:12px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.03em;margin:4px 0 2px}
+.muscle-filter-select{width:100%;border:1px solid #ddd;border-radius:12px;padding:12px;font-size:16px;background:#fff;margin-bottom:10px}
+.muscle-filter-compact .muscle-filter-row{margin-bottom:8px}
+.muscle-filter-empty{color:#777;font-size:14px;padding:8px 0}
+.muscle-tag.sub{background:#ebe9e5;color:#333}

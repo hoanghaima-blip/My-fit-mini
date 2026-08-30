@@ -319,12 +319,14 @@
     if (!workout || !els.list) return;
     var exercises = getDisplayedExercises();
     els.list.innerHTML = exercises.map(function (exercise, index) {
+      var muscleHtml = formatMuscleTagsHtml(exercise);
       return (
         '<div class="card">' +
           '<div class="card-top">' +
             placeholderImageHtml('card-image') +
             '<div class="card-body">' +
               '<div class="name">' + (index + 1) + '. ' + escapeHtml(exercise.name) + '</div>' +
+              (muscleHtml ? '<div class="muscle-tags">' + muscleHtml + '</div>' : '') +
               '<div class="meta">' + escapeHtml(D.formatExerciseMeta(exercise)) + '</div>' +
               '<span class="badge" data-action="detail" data-index="' + index + '">Xem hướng dẫn</span>' +
               (exercise.instructions ? '<div class="note">' + escapeHtml(exercise.instructions) + '</div>' : '') +
@@ -707,21 +709,10 @@
   }
 
   function formatMuscleTagsHtml(exercise) {
-    var tags = [];
-    if (exercise.primaryMuscleGroup) {
-      tags.push('<span class="muscle-tag primary">' + escapeHtml(D.muscleGroupLabel(exercise.primaryMuscleGroup)) + '</span>');
-    }
-    if (exercise.secondaryMuscleGroup) {
-      tags.push('<span class="muscle-tag sub">' + escapeHtml(D.muscleGroupLabel(exercise.secondaryMuscleGroup)) + '</span>');
-    }
-    if (exercise.targetArea) {
-      tags.push('<span class="muscle-tag sub">' + escapeHtml(D.muscleGroupLabel(exercise.targetArea)) + '</span>');
-    }
-    (exercise.secondaryMuscleGroups || []).forEach(function (id) {
-      if (!id || id === exercise.primaryMuscleGroup || id === exercise.secondaryMuscleGroup) return;
-      tags.push('<span class="muscle-tag">' + escapeHtml(D.muscleGroupLabel(id)) + '</span>');
-    });
-    return tags.join('');
+    return D.getMuscleDisplayParts(exercise).map(function (part) {
+      var cls = part.id === exercise.primaryMuscleGroup ? 'muscle-tag primary' : 'muscle-tag sub';
+      return '<span class="' + cls + '">' + escapeHtml(part.label) + '</span>';
+    }).join('');
   }
 
   function muscleFilterChipHtml(id, label, active, kind) {
@@ -890,17 +881,22 @@
     showOverlay(els.detailOverlay);
   }
 
-  function populateSecondaryMuscleOptions(form, primaryId, selectedSecondary, selectedTarget) {
+  function populateSecondaryMuscleOptions(form, primaryId, selectedSecondary, selectedTarget, selectedLeaf) {
     var secondaryEl = form.querySelector('[data-role="secondary-muscle"]');
     var targetWrap = form.querySelector('[data-role="target-area-wrap"]');
     var targetEl = form.querySelector('[data-role="target-area"]');
+    var leafWrap = form.querySelector('[data-role="muscle-leaf-wrap"]');
+    var leafEl = form.querySelector('[data-role="muscle-leaf"]');
     if (!secondaryEl) return;
     secondaryEl.innerHTML = '<option value="">— Chọn nhóm cơ phụ —</option>';
     if (targetEl) targetEl.innerHTML = '<option value="">— Chọn vùng (tùy chọn) —</option>';
+    if (leafEl) leafEl.innerHTML = '<option value="">— Chọn chi tiết —</option>';
     if (!primaryId) {
       secondaryEl.value = '';
       if (targetWrap) targetWrap.hidden = true;
       if (targetEl) targetEl.value = '';
+      if (leafWrap) leafWrap.hidden = true;
+      if (leafEl) leafEl.value = '';
       return;
     }
     D.getSubgroupsForPrimary(primaryId).forEach(function (sub) {
@@ -910,7 +906,29 @@
       secondaryEl.appendChild(opt);
     });
     secondaryEl.value = selectedSecondary || '';
+    updateMuscleLeafOptions(form, primaryId, selectedSecondary || '', selectedLeaf || '');
     updateTargetAreaOptions(form, primaryId, selectedSecondary, selectedTarget);
+  }
+
+  function updateMuscleLeafOptions(form, primaryId, secondaryId, selectedLeaf) {
+    var leafWrap = form.querySelector('[data-role="muscle-leaf-wrap"]');
+    var leafEl = form.querySelector('[data-role="muscle-leaf"]');
+    if (!leafWrap || !leafEl) return;
+    leafEl.innerHTML = '<option value="">— Chọn chi tiết —</option>';
+    var sub = D.findSubgroupDef(primaryId, secondaryId);
+    if (!sub || !sub.children || !sub.children.length) {
+      leafWrap.hidden = true;
+      leafEl.value = '';
+      return;
+    }
+    leafWrap.hidden = false;
+    sub.children.forEach(function (child) {
+      var opt = document.createElement('option');
+      opt.value = child.id;
+      opt.textContent = child.label;
+      leafEl.appendChild(opt);
+    });
+    leafEl.value = selectedLeaf || '';
   }
 
   function updateTargetAreaOptions(form, primaryId, secondaryId, selectedTarget) {
@@ -941,12 +959,14 @@
     var secondaryEl = form.querySelector('[data-role="secondary-muscle"]');
     if (primaryEl) {
       primaryEl.addEventListener('change', function () {
-        populateSecondaryMuscleOptions(form, primaryEl.value, '', '');
+        populateSecondaryMuscleOptions(form, primaryEl.value, '', '', '');
       });
     }
     if (secondaryEl) {
       secondaryEl.addEventListener('change', function () {
-        updateTargetAreaOptions(form, primaryEl ? primaryEl.value : '', secondaryEl.value, '');
+        var primaryId = primaryEl ? primaryEl.value : '';
+        updateMuscleLeafOptions(form, primaryId, secondaryEl.value, '');
+        updateTargetAreaOptions(form, primaryId, secondaryEl.value, '');
       });
     }
   }
@@ -968,10 +988,14 @@
   function readMuscleGroupsFromForm(form) {
     var primaryEl = form.elements.primaryMuscleGroup;
     var secondaryEl = form.querySelector('[data-role="secondary-muscle"]');
+    var leafEl = form.querySelector('[data-role="muscle-leaf"]');
+    var leafWrap = form.querySelector('[data-role="muscle-leaf-wrap"]');
     var targetEl = form.querySelector('[data-role="target-area"]');
+    var secondaryValue = secondaryEl ? secondaryEl.value : '';
+    var leafValue = leafEl && leafWrap && !leafWrap.hidden ? leafEl.value : '';
     return {
       primaryMuscleGroup: primaryEl ? primaryEl.value : '',
-      secondaryMuscleGroup: secondaryEl ? secondaryEl.value : '',
+      secondaryMuscleGroup: leafValue || secondaryValue,
       targetArea: targetEl ? targetEl.value : '',
       secondaryMuscleGroups: []
     };
@@ -979,13 +1003,15 @@
 
   function fillMuscleGroupsInForm(form, exercise) {
     populateMuscleGroupFields(form);
+    var levels = D.resolveMuscleFormLevels(exercise);
     var primaryEl = form.elements.primaryMuscleGroup;
-    if (primaryEl) primaryEl.value = exercise.primaryMuscleGroup || '';
+    if (primaryEl) primaryEl.value = levels.primary;
     populateSecondaryMuscleOptions(
       form,
-      exercise.primaryMuscleGroup || '',
-      exercise.secondaryMuscleGroup || '',
-      exercise.targetArea || ''
+      levels.primary,
+      levels.secondary,
+      levels.targetArea,
+      levels.leaf
     );
   }
 
@@ -1349,19 +1375,30 @@
   function readExerciseFormCore(form, existingId, workoutId, sourceExercise) {
     var mode = getFormMode(form);
     var state = formImageState[mode];
+    var mediaDirty = formMediaDirty[mode] || { image: false, instructionImages: false };
     var fields = form.elements;
-    var base = {
-      id: existingId || D.makeExerciseId(workoutId, fields.name.value.trim()),
-      name: fields.name.value,
+    var id = existingId || (sourceExercise && sourceExercise.id) || D.makeExerciseId(workoutId, fields.name.value.trim());
+    var base = sourceExercise ? D.clone(sourceExercise) : {
+      id: id,
       image: '',
       imageId: '',
-      instructions: fields.instructions.value,
-      notes: fields.notes.value,
-      sets: Math.max(1, parseInt(fields.sets.value, 10) || 1),
-      reps: Math.max(1, parseInt(fields.reps.value, 10) || 1),
-      resistance: Math.max(0, parseFloat(fields.resistance.value) || 0),
-      resistanceType: fields.resistanceType.value
+      instructions: '',
+      notes: '',
+      sets: 3,
+      reps: 10,
+      resistance: 0,
+      resistanceType: 'kg'
     };
+    base.id = id;
+    base.name = fields.name.value;
+    base.instructions = fields.instructions.value;
+    base.notes = fields.notes.value;
+    base.sets = Math.max(1, parseInt(fields.sets.value, 10) || 1);
+    base.reps = Math.max(1, parseInt(fields.reps.value, 10) || 1);
+    base.resistance = Math.max(0, parseFloat(fields.resistance.value) || 0);
+    base.resistanceType = fields.resistanceType.value;
+    if (base.image === undefined) base.image = '';
+    if (base.imageId === undefined) base.imageId = '';
 
     if (state.pendingFile) {
       imageDebug('save started', state.pendingFile.size, state.pendingFile.type);
@@ -1400,17 +1437,20 @@
     }
 
     var url = fields.image.value.trim();
-    if (url) {
+    if (url && mediaDirty.image) {
       base.image = url;
       base.imageId = '';
       return chainFinalizeExerciseForm(form, Promise.resolve(base), sourceExercise);
     }
 
-    base.image = state.existingImage || '';
-    base.imageId = state.existingImageId || '';
-    if (!base.image && !base.imageId && existingId) {
-      var catalog = D.catalogImageForExercise({ id: existingId, name: base.name });
-      if (catalog) base.image = catalog;
+    if (!mediaDirty.image && !state.pendingFile && !state.clearImage) {
+      if (!base.image && !base.imageId && id) {
+        var catalog = D.catalogImageForExercise({ id: id, name: base.name });
+        if (catalog) base.image = catalog;
+      }
+    } else if (!base.image && !base.imageId && id) {
+      var catalogFallback = D.catalogImageForExercise({ id: id, name: base.name });
+      if (catalogFallback) base.image = catalogFallback;
     }
     return chainFinalizeExerciseForm(form, Promise.resolve(finalizeExerciseImageFields(base)), sourceExercise);
   }

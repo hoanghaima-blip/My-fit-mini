@@ -216,11 +216,52 @@
 
   function muscleClassificationLabel(exercise) {
     if (!exercise) return '';
+    return getMuscleDisplayParts(exercise).map(function (part) { return part.label; }).join(' · ');
+  }
+
+  function resolveMuscleFormLevels(exercise) {
+    exercise = exercise || {};
+    var primary = exercise.primaryMuscleGroup || '';
+    var secondary = exercise.secondaryMuscleGroup || '';
+    var targetArea = exercise.targetArea || '';
+    var leaf = '';
+    if (primary && secondary) {
+      var leafInfo = buildMuscleLookupCache().leafById[secondary];
+      if (leafInfo && leafInfo.kind === 'child') {
+        leaf = secondary;
+        secondary = leafInfo.subgroup.id;
+      }
+    }
+    return {
+      primary: primary,
+      secondary: secondary,
+      leaf: leaf,
+      targetArea: targetArea
+    };
+  }
+
+  function getMuscleDisplayParts(exercise) {
+    if (!exercise) return [];
     var parts = [];
-    if (exercise.primaryMuscleGroup) parts.push(muscleGroupLabel(exercise.primaryMuscleGroup));
-    if (exercise.secondaryMuscleGroup) parts.push(muscleGroupLabel(exercise.secondaryMuscleGroup));
-    if (exercise.targetArea) parts.push(muscleGroupLabel(exercise.targetArea));
-    return parts.join(' · ');
+    var seen = {};
+    function add(id) {
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      parts.push({ id: id, label: muscleGroupLabel(id) });
+    }
+    add(exercise.primaryMuscleGroup);
+    var secondary = exercise.secondaryMuscleGroup || '';
+    if (secondary) {
+      var leafInfo = buildMuscleLookupCache().leafById[secondary];
+      if (leafInfo && leafInfo.kind === 'child') {
+        add(leafInfo.subgroup.id);
+        add(secondary);
+      } else {
+        add(secondary);
+      }
+    }
+    add(exercise.targetArea);
+    return parts;
   }
 
   function createMuscleFilterState() {
@@ -481,8 +522,9 @@
   function applyMasterFields(target, master) {
     var next = clone(target);
     next.name = master.name;
-    next.image = master.image || '';
-    next.imageId = master.imageId || '';
+    var imageFields = pickExerciseImageFields(target, master);
+    next.image = imageFields.image;
+    next.imageId = imageFields.imageId;
     next.instructions = master.instructions || '';
     next.notes = master.notes || '';
     next.sets = master.sets;
@@ -1073,7 +1115,7 @@
   function exerciseContentMatches(exercise, defaults) {
     var a = clone(exercise);
     var b = clone(defaults);
-    ['image', 'imageId', 'primaryMuscleGroup', 'secondaryMuscleGroups', 'tips', 'commonMistakes', 'instructionImages'].forEach(function (key) {
+    ['image', 'imageId', 'primaryMuscleGroup', 'secondaryMuscleGroup', 'targetArea', 'secondaryMuscleGroups', 'tips', 'commonMistakes', 'instructionImages'].forEach(function (key) {
       delete a[key];
       delete b[key];
     });
@@ -1743,6 +1785,8 @@
     getSubgroupsForPrimary: getSubgroupsForPrimary,
     findSubgroupDef: findSubgroupDef,
     muscleClassificationLabel: muscleClassificationLabel,
+    resolveMuscleFormLevels: resolveMuscleFormLevels,
+    getMuscleDisplayParts: getMuscleDisplayParts,
     createMuscleFilterState: createMuscleFilterState,
     cloneMuscleFilterState: cloneMuscleFilterState,
     resetMuscleFilterLevel: resetMuscleFilterLevel,

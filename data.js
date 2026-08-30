@@ -27,19 +27,305 @@
     { key: 'cn', label: 'CN', emoji: '😴', workoutId: null }
   ];
 
-  var MUSCLE_GROUPS = [
-    { id: 'glutes', label: 'Mông' },
-    { id: 'quads', label: 'Đùi trước' },
-    { id: 'hamstrings', label: 'Đùi sau' },
-    { id: 'calves', label: 'Bắp chân' },
-    { id: 'back', label: 'Lưng' },
-    { id: 'shoulders', label: 'Vai' },
-    { id: 'chest', label: 'Ngực' },
-    { id: 'biceps', label: 'Tay trước' },
-    { id: 'triceps', label: 'Tay sau' },
-    { id: 'core', label: 'Bụng / Core' },
-    { id: 'full-body', label: 'Toàn thân' }
+  var MUSCLE_GROUP_CONFIG = [
+    {
+      id: 'chest',
+      label: 'Ngực',
+      subgroups: [
+        { id: 'upper_chest', label: 'Ngực trên' },
+        { id: 'middle_chest', label: 'Ngực giữa' },
+        { id: 'lower_chest', label: 'Ngực dưới' }
+      ]
+    },
+    {
+      id: 'back',
+      label: 'Lưng',
+      subgroups: [
+        {
+          id: 'traps',
+          label: 'Cơ thang (Trap)',
+          children: [
+            { id: 'trap_upper', label: 'Trap trên' },
+            { id: 'trap_middle', label: 'Trap giữa' },
+            { id: 'trap_lower', label: 'Trap dưới' }
+          ]
+        },
+        { id: 'lats', label: 'Cơ xô (Latissimus Dorsi / Lats)' },
+        {
+          id: 'rhomboids',
+          label: 'Cơ trám',
+          children: [
+            { id: 'rhomboid_major', label: 'Trám lớn' },
+            { id: 'rhomboid_minor', label: 'Trám bé' }
+          ]
+        },
+        { id: 'teres_major', label: 'Cơ tròn lớn (Teres Major)' },
+        { id: 'erector_spinae', label: 'Cơ dựng sống (Erector Spinae)' },
+        { id: 'quadratus_lumborum', label: 'Cơ vuông thắt lưng (Quadratus Lumborum)' }
+      ]
+    },
+    {
+      id: 'shoulders',
+      label: 'Vai',
+      subgroups: [
+        { id: 'front_delts', label: 'Vai trước' },
+        { id: 'side_delts', label: 'Vai giữa' },
+        { id: 'rear_delts', label: 'Vai sau' }
+      ]
+    },
+    {
+      id: 'biceps',
+      label: 'Tay trước',
+      subgroups: [
+        { id: 'biceps_long_head', label: 'Biceps đầu dài' },
+        { id: 'biceps_short_head', label: 'Biceps đầu ngắn' },
+        { id: 'brachialis', label: 'Brachialis' },
+        { id: 'brachioradialis', label: 'Brachioradialis' }
+      ]
+    },
+    {
+      id: 'triceps',
+      label: 'Tay sau',
+      subgroups: [
+        { id: 'triceps_long_head', label: 'Triceps đầu dài' },
+        { id: 'triceps_lateral_head', label: 'Triceps đầu ngoài' },
+        { id: 'triceps_medial_head', label: 'Triceps đầu trong' }
+      ]
+    },
+    {
+      id: 'core',
+      label: 'Bụng',
+      subgroups: [
+        { id: 'rectus_abdominis', label: 'Rectus Abdominis' },
+        { id: 'obliques', label: 'Obliques' },
+        { id: 'transverse_abdominis', label: 'Transverse Abdominis' }
+      ]
+    },
+    {
+      id: 'glutes',
+      label: 'Mông',
+      subgroups: [
+        {
+          id: 'gluteus_maximus',
+          label: 'Mông lớn (Gluteus Maximus)',
+          targetAreas: [
+            { id: 'upper_glute', label: 'Mông lớn – bó trên' },
+            { id: 'lower_glute', label: 'Mông lớn – bó dưới' }
+          ]
+        },
+        { id: 'gluteus_medius', label: 'Mông giữa (Gluteus Medius)' },
+        { id: 'gluteus_minimus', label: 'Mông bé (Gluteus Minimus)' },
+        { id: 'side_glute', label: 'Mông bên' }
+      ]
+    },
+    {
+      id: 'quads',
+      label: 'Đùi trước',
+      subgroups: [
+        { id: 'rectus_femoris', label: 'Rectus Femoris' },
+        { id: 'vastus_lateralis', label: 'Vastus Lateralis' },
+        { id: 'vastus_medialis', label: 'Vastus Medialis' },
+        { id: 'vastus_intermedius', label: 'Vastus Intermedius' }
+      ]
+    },
+    {
+      id: 'hamstrings',
+      label: 'Đùi sau',
+      subgroups: [
+        { id: 'biceps_femoris', label: 'Biceps Femoris' },
+        { id: 'semitendinosus', label: 'Semitendinosus' },
+        { id: 'semimembranosus', label: 'Semimembranosus' }
+      ]
+    },
+    {
+      id: 'calves',
+      label: 'Bắp chân',
+      subgroups: [
+        { id: 'gastrocnemius', label: 'Gastrocnemius' },
+        { id: 'soleus', label: 'Soleus' }
+      ]
+    }
   ];
+
+  var MUSCLE_GROUPS = MUSCLE_GROUP_CONFIG.map(function (group) {
+    return { id: group.id, label: group.label };
+  });
+  MUSCLE_GROUPS.push({ id: 'full-body', label: 'Toàn thân' });
+
+  var muscleLookupCache = null;
+
+  function buildMuscleLookupCache() {
+    if (muscleLookupCache) return muscleLookupCache;
+    var primaryById = {};
+    var subgroupById = {};
+    var leafById = {};
+    MUSCLE_GROUP_CONFIG.forEach(function (primary) {
+      primaryById[primary.id] = primary;
+      (primary.subgroups || []).forEach(function (sub) {
+        subgroupById[sub.id] = { primary: primary, subgroup: sub };
+        if (sub.children) {
+          sub.children.forEach(function (child) {
+            leafById[child.id] = {
+              primary: primary,
+              subgroup: sub,
+              leaf: child,
+              kind: 'child'
+            };
+          });
+        }
+        if (sub.targetAreas) {
+          sub.targetAreas.forEach(function (area) {
+            leafById[area.id] = {
+              primary: primary,
+              subgroup: sub,
+              leaf: area,
+              kind: 'targetArea'
+            };
+          });
+        }
+      });
+    });
+    muscleLookupCache = { primaryById: primaryById, subgroupById: subgroupById, leafById: leafById };
+    return muscleLookupCache;
+  }
+
+  function getPrimaryMuscleConfig(primaryId) {
+    return buildMuscleLookupCache().primaryById[primaryId] || null;
+  }
+
+  function getSubgroupsForPrimary(primaryId) {
+    var primary = getPrimaryMuscleConfig(primaryId);
+    return primary && primary.subgroups ? primary.subgroups.slice() : [];
+  }
+
+  function findSubgroupDef(primaryId, subgroupId) {
+    return getSubgroupsForPrimary(primaryId).filter(function (sub) {
+      return sub.id === subgroupId;
+    })[0] || null;
+  }
+
+  function muscleGroupLabel(id) {
+    if (!id) return '';
+    var cache = buildMuscleLookupCache();
+    if (cache.primaryById[id]) return cache.primaryById[id].label;
+    if (cache.subgroupById[id]) return cache.subgroupById[id].subgroup.label;
+    if (cache.leafById[id]) return cache.leafById[id].leaf.label;
+    var legacy = MUSCLE_GROUPS.filter(function (g) { return g.id === id; })[0];
+    return legacy ? legacy.label : '';
+  }
+
+  function muscleClassificationLabel(exercise) {
+    if (!exercise) return '';
+    var parts = [];
+    if (exercise.primaryMuscleGroup) parts.push(muscleGroupLabel(exercise.primaryMuscleGroup));
+    if (exercise.secondaryMuscleGroup) parts.push(muscleGroupLabel(exercise.secondaryMuscleGroup));
+    if (exercise.targetArea) parts.push(muscleGroupLabel(exercise.targetArea));
+    return parts.join(' · ');
+  }
+
+  function createMuscleFilterState() {
+    return {
+      primaryId: '',
+      subgroupId: '',
+      leafId: '',
+      search: ''
+    };
+  }
+
+  function cloneMuscleFilterState(state) {
+    state = state || createMuscleFilterState();
+    return {
+      primaryId: state.primaryId || '',
+      subgroupId: state.subgroupId || '',
+      leafId: state.leafId || '',
+      search: state.search || ''
+    };
+  }
+
+  function resetMuscleFilterLevel(state, level) {
+    state = state || createMuscleFilterState();
+    if (level === 'all') {
+      state.primaryId = '';
+      state.subgroupId = '';
+      state.leafId = '';
+      return state;
+    }
+    if (level === 'primary') {
+      state.subgroupId = '';
+      state.leafId = '';
+      return state;
+    }
+    if (level === 'subgroup') {
+      state.leafId = '';
+      return state;
+    }
+    return state;
+  }
+
+  function getMuscleFilterBreadcrumb(filter) {
+    filter = filter || createMuscleFilterState();
+    var parts = [];
+    if (!filter.primaryId) return parts;
+    parts.push({ id: filter.primaryId, label: muscleGroupLabel(filter.primaryId), level: 'primary' });
+    if (!filter.subgroupId) return parts;
+    parts.push({ id: filter.subgroupId, label: muscleGroupLabel(filter.subgroupId), level: 'subgroup' });
+    if (!filter.leafId) return parts;
+    parts.push({ id: filter.leafId, label: muscleGroupLabel(filter.leafId), level: 'leaf' });
+    return parts;
+  }
+
+  function getMuscleFilterSublevelOptions(filter) {
+    filter = filter || createMuscleFilterState();
+    if (!filter.primaryId) return [];
+    if (!filter.subgroupId) {
+      return getSubgroupsForPrimary(filter.primaryId);
+    }
+    var sub = findSubgroupDef(filter.primaryId, filter.subgroupId);
+    if (!sub) return [];
+    if (sub.children) return sub.children.slice();
+    if (sub.targetAreas) return sub.targetAreas.slice();
+    return [];
+  }
+
+  function exerciseMatchesMuscleFilter(exercise, filter) {
+    if (!exercise) return false;
+    filter = filter || createMuscleFilterState();
+    var search = String(filter.search || '').trim().toLowerCase();
+    if (search && String(exercise.name || '').toLowerCase().indexOf(search) < 0) return false;
+    if (!filter.primaryId) return true;
+    if ((exercise.primaryMuscleGroup || '') !== filter.primaryId) return false;
+    if (!filter.subgroupId) return true;
+
+    var secondary = exercise.secondaryMuscleGroup || '';
+    var targetArea = exercise.targetArea || '';
+
+    if (filter.leafId) {
+      var leafInfo = buildMuscleLookupCache().leafById[filter.leafId];
+      if (leafInfo && leafInfo.kind === 'targetArea') {
+        return secondary === filter.subgroupId && targetArea === filter.leafId;
+      }
+      return secondary === filter.leafId;
+    }
+
+    var subDef = findSubgroupDef(filter.primaryId, filter.subgroupId);
+    if (!subDef) return secondary === filter.subgroupId;
+
+    if (subDef.children) {
+      if (secondary === filter.subgroupId) return true;
+      return subDef.children.some(function (child) { return child.id === secondary; });
+    }
+    if (subDef.targetAreas) {
+      if (secondary !== filter.subgroupId) return false;
+      return true;
+    }
+    return secondary === filter.subgroupId;
+  }
+
+  function filterExercisesByMuscle(exercises, filter) {
+    return (exercises || []).filter(function (exercise) {
+      return exerciseMatchesMuscleFilter(exercise, filter);
+    });
+  }
 
   var INSTRUCTION_IMAGE_TYPES = [
     { id: 'instruction', label: 'Hướng dẫn kỹ thuật' },
@@ -47,11 +333,6 @@
     { id: 'mistake', label: 'Lỗi thường gặp' },
     { id: 'other', label: 'Khác' }
   ];
-
-  function muscleGroupLabel(id) {
-    var match = MUSCLE_GROUPS.filter(function (g) { return g.id === id; })[0];
-    return match ? match.label : '';
-  }
 
   function instructionImageTypeLabel(type) {
     var match = INSTRUCTION_IMAGE_TYPES.filter(function (t) { return t.id === type; })[0];
@@ -79,6 +360,8 @@
   function normalizeExerciseMetadata(exercise) {
     if (!exercise || typeof exercise !== 'object') return exercise;
     if (exercise.primaryMuscleGroup === undefined) exercise.primaryMuscleGroup = '';
+    if (exercise.secondaryMuscleGroup === undefined) exercise.secondaryMuscleGroup = '';
+    if (exercise.targetArea === undefined) exercise.targetArea = '';
     if (!Array.isArray(exercise.secondaryMuscleGroups)) exercise.secondaryMuscleGroups = [];
     if (exercise.tips === undefined) exercise.tips = '';
     if (exercise.commonMistakes === undefined) exercise.commonMistakes = '';
@@ -209,6 +492,8 @@
     next.resistance = master.resistance;
     next.resistanceType = master.resistanceType;
     next.primaryMuscleGroup = master.primaryMuscleGroup || '';
+    next.secondaryMuscleGroup = master.secondaryMuscleGroup || '';
+    next.targetArea = master.targetArea || '';
     next.secondaryMuscleGroups = Array.isArray(master.secondaryMuscleGroups)
       ? master.secondaryMuscleGroups.slice()
       : [];
@@ -762,6 +1047,8 @@
     next.image = imageFields.image;
     next.imageId = imageFields.imageId;
     if (existing.primaryMuscleGroup) next.primaryMuscleGroup = existing.primaryMuscleGroup;
+    if (existing.secondaryMuscleGroup) next.secondaryMuscleGroup = existing.secondaryMuscleGroup;
+    if (existing.targetArea) next.targetArea = existing.targetArea;
     if (Array.isArray(existing.secondaryMuscleGroups) && existing.secondaryMuscleGroups.length) {
       next.secondaryMuscleGroups = existing.secondaryMuscleGroups.slice();
     }
@@ -983,6 +1270,8 @@
       resistance: exercise.resistance,
       resistanceType: exercise.resistanceType,
       primaryMuscleGroup: exercise.primaryMuscleGroup || '',
+      secondaryMuscleGroup: exercise.secondaryMuscleGroup || '',
+      targetArea: exercise.targetArea || '',
       secondaryMuscleGroups: Array.isArray(exercise.secondaryMuscleGroups)
         ? exercise.secondaryMuscleGroups.slice()
         : [],
@@ -1338,14 +1627,18 @@
       instructions: 'Khi thu chân về, co gối sâu; khi đá ra sau, đá hơi chéo để siết mông.',
       sets: 3,
       reps: 15,
-      resistanceType: 'band'
+      resistanceType: 'band',
+      primaryMuscleGroup: 'glutes',
+      secondaryMuscleGroup: 'gluteus_maximus'
     }),
     createLibraryExercise('Banded Abduction', {
       image: 'assets/exercises/banded-abduction.jpg',
       instructions: 'Mở gối chậm, giữ căng dây.',
       sets: 3,
       reps: 20,
-      resistanceType: 'band'
+      resistanceType: 'band',
+      primaryMuscleGroup: 'glutes',
+      secondaryMuscleGroup: 'gluteus_medius'
     }),
     createLibraryExercise('Lateral Raise', {
       image: 'assets/exercises/lateral-raise.jpg',
@@ -1353,21 +1646,27 @@
       sets: 3,
       reps: 15,
       resistance: 2,
-      resistanceType: 'kg'
+      resistanceType: 'kg',
+      primaryMuscleGroup: 'shoulders',
+      secondaryMuscleGroup: 'side_delts'
     }),
     createLibraryExercise('Face Pull', {
       image: 'assets/exercises/face-pull.jpg',
       instructions: 'Kéo cáp về phía mặt, khuỷu tay cao, siết lưng trên.',
       sets: 3,
       reps: 12,
-      resistanceType: 'band'
+      resistanceType: 'band',
+      primaryMuscleGroup: 'back',
+      secondaryMuscleGroup: 'trap_middle'
     }),
     createLibraryExercise('Calf Raise', {
       image: 'assets/exercises/calf-raise.jpg',
       instructions: 'Nhón gót có kiểm soát, dừng nhẹ ở đỉnh rồi hạ chậm.',
       sets: 3,
       reps: 15,
-      resistanceType: 'bodyweight'
+      resistanceType: 'bodyweight',
+      primaryMuscleGroup: 'calves',
+      secondaryMuscleGroup: 'gastrocnemius'
     })
   ];
 
@@ -1439,6 +1738,18 @@
     WORK_SECONDS_PER_SET: WORK_SECONDS_PER_SET,
     WEEK_DAYS: WEEK_DAYS,
     MUSCLE_GROUPS: MUSCLE_GROUPS,
+    MUSCLE_GROUP_CONFIG: MUSCLE_GROUP_CONFIG,
+    getPrimaryMuscleConfig: getPrimaryMuscleConfig,
+    getSubgroupsForPrimary: getSubgroupsForPrimary,
+    findSubgroupDef: findSubgroupDef,
+    muscleClassificationLabel: muscleClassificationLabel,
+    createMuscleFilterState: createMuscleFilterState,
+    cloneMuscleFilterState: cloneMuscleFilterState,
+    resetMuscleFilterLevel: resetMuscleFilterLevel,
+    getMuscleFilterBreadcrumb: getMuscleFilterBreadcrumb,
+    getMuscleFilterSublevelOptions: getMuscleFilterSublevelOptions,
+    exerciseMatchesMuscleFilter: exerciseMatchesMuscleFilter,
+    filterExercisesByMuscle: filterExercisesByMuscle,
     INSTRUCTION_IMAGE_TYPES: INSTRUCTION_IMAGE_TYPES,
     muscleGroupLabel: muscleGroupLabel,
     instructionImageTypeLabel: instructionImageTypeLabel,

@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="42"'), 'version meta is 42');
-    assert(html.includes('data.js?v=42'), 'script cache bust v42');
+    assert(html.includes('myfit-version" content="43"'), 'version meta is 43');
+    assert(html.includes('data.js?v=43'), 'script cache bust v43');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v42'), 'service worker cache v42');
-    assert(sw.includes('APP_VERSION = \'42\''), 'service worker APP_VERSION v42');
+    assert(sw.includes('my-fit-mini-v43'), 'service worker cache v43');
+    assert(sw.includes('APP_VERSION = \'43\''), 'service worker APP_VERSION v43');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v42 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v43 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -646,7 +646,8 @@ async function run() {
     assert(html.includes('id="dsets"'), 'detail sets row');
     assert(html.includes('id="detail-edit-btn"'), 'detail edit button for library');
     assert(add.querySelector('[data-role="instruction-gallery"]'), 'add form instruction gallery');
-    assert(add.querySelector('[data-role="secondary-muscles"]'), 'add form secondary muscles');
+    assert(add.querySelector('[data-role="secondary-muscle"]'), 'add form secondary muscle select');
+    assert(add.querySelector('[data-role="target-area"]'), 'add form target area select');
     assert(edit.elements.instructions.getAttribute('maxlength') == null, 'edit instructions unlimited');
     assert(edit.elements.notes.getAttribute('maxlength') == null, 'edit notes unlimited');
     assert(edit.elements.instructions.tagName === 'TEXTAREA', 'instructions is textarea');
@@ -1851,7 +1852,8 @@ async function run() {
     const { window, dom } = loadApp();
     const D = window.MyFitData;
     const addForm = window.document.getElementById('add-exercise-form');
-    assert(D.MUSCLE_GROUPS.length === 11, '11 muscle groups defined');
+    assert(D.MUSCLE_GROUP_CONFIG.length === 10, '10 primary muscle groups in config');
+    assert(D.MUSCLE_GROUPS.length === 11, '11 muscle groups including legacy full-body');
     assert(D.INSTRUCTION_IMAGE_TYPES.length === 4, '4 instruction image types');
     assert(addForm.elements.primaryMuscleGroup, 'add form primary muscle select');
     assert(addForm.elements.tips, 'add form tips field');
@@ -2088,6 +2090,82 @@ async function run() {
     pass('TEST 37: edit muscle only preserves images (T4 bài 3/4)');
   } catch (err) {
     fail('TEST 37', err);
+  }
+
+  // TEST 38: shared muscle filter — library + pick modal + edit preserves image
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const app = window.MyFitApp;
+    const doc = window.document;
+
+    const lib = D.loadLibrary();
+    const medius = lib.exercises.find((ex) => ex.secondaryMuscleGroup === 'gluteus_medius');
+    const facePull = lib.exercises.find((ex) => ex.name === 'Face Pull');
+    assert(medius && facePull, 'seed library has gluteus medius + Face Pull');
+
+    const glutesMediusFilter = {
+      primaryId: 'glutes',
+      subgroupId: 'gluteus_medius',
+      leafId: '',
+      search: ''
+    };
+    const glutesFiltered = D.filterExercisesByMuscle(lib.exercises, glutesMediusFilter);
+    assert(glutesFiltered.some((ex) => ex.name === 'Banded Abduction'), 'filter glutes → gluteus medius');
+    assert(!glutesFiltered.some((ex) => ex.name === 'Cable Kickback'), 'gluteus maximus excluded');
+
+    const trapFilter = {
+      primaryId: 'back',
+      subgroupId: 'traps',
+      leafId: 'trap_middle',
+      search: ''
+    };
+    const trapFiltered = D.filterExercisesByMuscle(lib.exercises, trapFilter);
+    assert(trapFiltered.some((ex) => ex.name === 'Face Pull'), 'filter back → trap middle');
+
+    const searchFilter = {
+      primaryId: 'back',
+      subgroupId: 'traps',
+      leafId: 'trap_middle',
+      search: 'face'
+    };
+    assert(D.filterExercisesByMuscle(lib.exercises, searchFilter).length === 1, 'search + filter combined');
+
+    app.welcomeOpenLibrary();
+    app.showLibrary();
+    assert(doc.getElementById('library-muscle-filter'), 'library filter panel exists');
+    assert(doc.getElementById('library-search'), 'library search input exists');
+
+    app.openPickExerciseForSession({ fromRest: true });
+    assert(doc.getElementById('pick-muscle-filter'), 'pick modal filter panel exists');
+    assert(doc.getElementById('pick-exercise-search'), 'pick modal search exists');
+    app.closePickExercise();
+
+    const kickback = lib.exercises.find((ex) => ex.name === 'Cable Kickback');
+    kickback.imageId = 'img-kickback-test';
+    kickback.image = '';
+    D.saveLibrary(lib);
+    sharedImageMemory['img-kickback-test'] = new Blob(['k'], { type: 'image/jpeg' });
+    const kickIdx = D.loadLibrary(app.getWorkouts()).exercises.findIndex((ex) => ex.id === kickback.id);
+    app.showLibrary();
+    const editBtn = doc.querySelector('[data-library-action="edit"][data-index="' + kickIdx + '"]');
+    assert(editBtn, 'library edit button for kickback');
+    editBtn.click();
+    const editForm = doc.getElementById('edit-form');
+    editForm.elements.primaryMuscleGroup.value = 'glutes';
+    editForm.elements.primaryMuscleGroup.dispatchEvent(new window.Event('change', { bubbles: true }));
+    editForm.elements.secondaryMuscleGroup.value = 'gluteus_medius';
+    editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await wait(400);
+    const savedKick = app.getLibrary().exercises.find((ex) => ex.id === kickback.id);
+    assert(savedKick.secondaryMuscleGroup === 'gluteus_medius', 'edit secondary muscle saved');
+    assert(savedKick.imageId === 'img-kickback-test', 'edit muscle change preserves imageId');
+
+    dom.window.close();
+    pass('TEST 38: muscle group config filter library pick edit image preserved');
+  } catch (err) {
+    fail('TEST 38', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

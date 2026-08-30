@@ -46,6 +46,8 @@
   var instructionDragIndex = null;
   var detailContext = { mode: 'schedule', libraryIndex: -1, libraryExerciseId: '' };
   var editingLibraryIndex = -1;
+  var libraryMuscleFilter = D.createMuscleFilterState();
+  var pickMuscleFilter = D.createMuscleFilterState();
 
   function isImageDebugEnabled() {
     try {
@@ -87,6 +89,8 @@
     appHome: document.getElementById('app-home'),
     libraryScreen: document.getElementById('library-screen'),
     libraryList: document.getElementById('library-list'),
+    libraryMuscleFilter: document.getElementById('library-muscle-filter'),
+    librarySearch: document.getElementById('library-search'),
     title: document.getElementById('hero-title'),
     meta: document.getElementById('hero-meta'),
     list: document.getElementById('exercise-list'),
@@ -134,6 +138,8 @@
     addExerciseOverlay: document.getElementById('add-exercise-overlay'),
     pickExerciseOverlay: document.getElementById('pick-exercise-overlay'),
     pickExerciseList: document.getElementById('pick-exercise-list'),
+    pickMuscleFilter: document.getElementById('pick-muscle-filter'),
+    pickExerciseSearch: document.getElementById('pick-exercise-search'),
     pickExerciseTitle: document.getElementById('pick-exercise-title'),
     pickExerciseIntro: document.getElementById('pick-exercise-intro'),
     addToScheduleOverlay: document.getElementById('add-to-schedule-overlay'),
@@ -572,16 +578,20 @@
     }
 
     if (els.dsecondaryMuscles) {
-      var secondary = (exercise.secondaryMuscleGroups || []).filter(function (id) {
-        return id && id !== exercise.primaryMuscleGroup;
+      var secondaryParts = [];
+      if (exercise.secondaryMuscleGroup) {
+        secondaryParts.push(D.muscleGroupLabel(exercise.secondaryMuscleGroup));
+      }
+      (exercise.secondaryMuscleGroups || []).forEach(function (id) {
+        if (!id || id === exercise.primaryMuscleGroup || id === exercise.secondaryMuscleGroup) return;
+        secondaryParts.push(D.muscleGroupLabel(id));
       });
-      if (secondary.length) {
+      if (exercise.targetArea) secondaryParts.push(D.muscleGroupLabel(exercise.targetArea));
+      if (secondaryParts.length) {
         els.dsecondaryMuscles.hidden = false;
         els.dsecondaryMuscles.innerHTML =
           '<span class="detail-label">Nhóm cơ phụ</span>' +
-          '<span class="detail-value">' +
-          secondary.map(function (id) { return escapeHtml(D.muscleGroupLabel(id)); }).join(', ') +
-          '</span>';
+          '<span class="detail-value">' + escapeHtml(secondaryParts.join(' · ')) + '</span>';
       } else {
         els.dsecondaryMuscles.hidden = true;
         els.dsecondaryMuscles.innerHTML = '';
@@ -701,11 +711,126 @@
     if (exercise.primaryMuscleGroup) {
       tags.push('<span class="muscle-tag primary">' + escapeHtml(D.muscleGroupLabel(exercise.primaryMuscleGroup)) + '</span>');
     }
+    if (exercise.secondaryMuscleGroup) {
+      tags.push('<span class="muscle-tag sub">' + escapeHtml(D.muscleGroupLabel(exercise.secondaryMuscleGroup)) + '</span>');
+    }
+    if (exercise.targetArea) {
+      tags.push('<span class="muscle-tag sub">' + escapeHtml(D.muscleGroupLabel(exercise.targetArea)) + '</span>');
+    }
     (exercise.secondaryMuscleGroups || []).forEach(function (id) {
-      if (id === exercise.primaryMuscleGroup) return;
+      if (!id || id === exercise.primaryMuscleGroup || id === exercise.secondaryMuscleGroup) return;
       tags.push('<span class="muscle-tag">' + escapeHtml(D.muscleGroupLabel(id)) + '</span>');
     });
     return tags.join('');
+  }
+
+  function muscleFilterChipHtml(id, label, active, kind) {
+    return (
+      '<button type="button" class="muscle-filter-chip' + (active ? ' active' : '') + '" ' +
+        'data-filter-kind="' + escapeHtml(kind || 'primary') + '" data-filter-id="' + escapeHtml(id || '') + '">' +
+        escapeHtml(label) +
+      '</button>'
+    );
+  }
+
+  function renderMuscleFilterPanel(container, filterState, onChange) {
+    if (!container) return;
+    var mode = container.dataset.filterMode || 'library';
+    var html = '';
+    var crumbs = D.getMuscleFilterBreadcrumb(filterState);
+
+    if (crumbs.length) {
+      html += '<div class="muscle-filter-breadcrumb"><strong>Nhóm cơ:</strong> ';
+      html += crumbs.map(function (crumb, index) {
+        return (index ? '<span class="crumb-sep">›</span>' : '') + escapeHtml(crumb.label);
+      }).join(' ');
+      html += ' <button type="button" class="muscle-filter-reset" data-filter-reset="back">Tất cả</button></div>';
+    }
+
+    if (mode === 'pick') {
+      html += '<select class="muscle-filter-select" data-filter-primary-select>';
+      html += '<option value="">Tất cả nhóm cơ</option>';
+      D.MUSCLE_GROUP_CONFIG.forEach(function (group) {
+        html += '<option value="' + escapeHtml(group.id) + '"' +
+          (filterState.primaryId === group.id ? ' selected' : '') + '>' +
+          escapeHtml(group.label) + '</option>';
+      });
+      html += '</select>';
+    } else {
+      html += '<div class="muscle-filter-label">Nhóm cơ chính</div><div class="muscle-filter-row">';
+      html += muscleFilterChipHtml('', 'Tất cả', !filterState.primaryId, 'primary');
+      D.MUSCLE_GROUP_CONFIG.forEach(function (group) {
+        html += muscleFilterChipHtml(group.id, group.label, filterState.primaryId === group.id, 'primary');
+      });
+      html += '</div>';
+    }
+
+    if (filterState.primaryId) {
+      html += '<div class="muscle-filter-label">' + escapeHtml(D.muscleGroupLabel(filterState.primaryId)) + '</div>';
+      html += '<div class="muscle-filter-row">';
+      html += muscleFilterChipHtml('', 'Tất cả', !filterState.subgroupId, 'subgroup');
+      D.getSubgroupsForPrimary(filterState.primaryId).forEach(function (sub) {
+        var active = filterState.subgroupId === sub.id && !filterState.leafId;
+        html += muscleFilterChipHtml(sub.id, sub.label, active, 'subgroup');
+      });
+      html += '</div>';
+
+      if (filterState.subgroupId) {
+        var leafOptions = D.getMuscleFilterSublevelOptions(filterState);
+        if (leafOptions.length) {
+          html += '<div class="muscle-filter-row">';
+          html += muscleFilterChipHtml('', 'Tất cả', !filterState.leafId, 'leaf');
+          leafOptions.forEach(function (leaf) {
+            html += muscleFilterChipHtml(leaf.id, leaf.label, filterState.leafId === leaf.id, 'leaf');
+          });
+          html += '</div>';
+        }
+      }
+    }
+
+    container.innerHTML = html;
+
+    if (!container.dataset.bound) {
+      container.dataset.bound = '1';
+      container.addEventListener('click', function (event) {
+        var chip = event.target.closest('[data-filter-id]');
+        if (chip && chip.dataset.filterKind) {
+          var kind = chip.dataset.filterKind;
+          var id = chip.dataset.filterId || '';
+          if (kind === 'primary') {
+            filterState.primaryId = id;
+            D.resetMuscleFilterLevel(filterState, id ? 'primary' : 'all');
+          } else if (kind === 'subgroup') {
+            filterState.subgroupId = id;
+            D.resetMuscleFilterLevel(filterState, id ? 'subgroup' : 'primary');
+          } else if (kind === 'leaf') {
+            filterState.leafId = id;
+          }
+          if (onChange) onChange();
+          return;
+        }
+        var resetBtn = event.target.closest('[data-filter-reset]');
+        if (resetBtn) {
+          D.resetMuscleFilterLevel(filterState, 'all');
+          if (onChange) onChange();
+        }
+      });
+      container.addEventListener('change', function (event) {
+        var select = event.target.closest('[data-filter-primary-select]');
+        if (!select) return;
+        filterState.primaryId = select.value || '';
+        D.resetMuscleFilterLevel(filterState, filterState.primaryId ? 'primary' : 'all');
+        if (onChange) onChange();
+      });
+    }
+  }
+
+  function getFilteredLibraryExercises() {
+    return D.filterExercisesByMuscle((library && library.exercises) || [], libraryMuscleFilter);
+  }
+
+  function getFilteredCatalogExercises() {
+    return D.filterExercisesByMuscle(getExerciseCatalog(), pickMuscleFilter);
   }
 
   function renderDetailInstructionGallery(exercise) {
@@ -765,49 +890,103 @@
     showOverlay(els.detailOverlay);
   }
 
+  function populateSecondaryMuscleOptions(form, primaryId, selectedSecondary, selectedTarget) {
+    var secondaryEl = form.querySelector('[data-role="secondary-muscle"]');
+    var targetWrap = form.querySelector('[data-role="target-area-wrap"]');
+    var targetEl = form.querySelector('[data-role="target-area"]');
+    if (!secondaryEl) return;
+    secondaryEl.innerHTML = '<option value="">— Chọn nhóm cơ phụ —</option>';
+    if (targetEl) targetEl.innerHTML = '<option value="">— Chọn vùng (tùy chọn) —</option>';
+    if (!primaryId) {
+      secondaryEl.value = '';
+      if (targetWrap) targetWrap.hidden = true;
+      if (targetEl) targetEl.value = '';
+      return;
+    }
+    D.getSubgroupsForPrimary(primaryId).forEach(function (sub) {
+      var opt = document.createElement('option');
+      opt.value = sub.id;
+      opt.textContent = sub.label;
+      secondaryEl.appendChild(opt);
+    });
+    secondaryEl.value = selectedSecondary || '';
+    updateTargetAreaOptions(form, primaryId, selectedSecondary, selectedTarget);
+  }
+
+  function updateTargetAreaOptions(form, primaryId, secondaryId, selectedTarget) {
+    var targetWrap = form.querySelector('[data-role="target-area-wrap"]');
+    var targetEl = form.querySelector('[data-role="target-area"]');
+    if (!targetWrap || !targetEl) return;
+    targetEl.innerHTML = '<option value="">— Chọn vùng (tùy chọn) —</option>';
+    var sub = D.findSubgroupDef(primaryId, secondaryId);
+    if (!sub || !sub.targetAreas || !sub.targetAreas.length) {
+      targetWrap.hidden = true;
+      targetEl.value = '';
+      return;
+    }
+    targetWrap.hidden = false;
+    sub.targetAreas.forEach(function (area) {
+      var opt = document.createElement('option');
+      opt.value = area.id;
+      opt.textContent = area.label;
+      targetEl.appendChild(opt);
+    });
+    targetEl.value = selectedTarget || '';
+  }
+
+  function bindMuscleFormCascade(form) {
+    if (!form || form.dataset.muscleCascadeBound === '1') return;
+    form.dataset.muscleCascadeBound = '1';
+    var primaryEl = form.elements.primaryMuscleGroup;
+    var secondaryEl = form.querySelector('[data-role="secondary-muscle"]');
+    if (primaryEl) {
+      primaryEl.addEventListener('change', function () {
+        populateSecondaryMuscleOptions(form, primaryEl.value, '', '');
+      });
+    }
+    if (secondaryEl) {
+      secondaryEl.addEventListener('change', function () {
+        updateTargetAreaOptions(form, primaryEl ? primaryEl.value : '', secondaryEl.value, '');
+      });
+    }
+  }
+
   function populateMuscleGroupFields(form) {
     if (!form) return;
     var primary = form.querySelector('[data-role="primary-muscle"]');
-    var secondary = form.querySelector('[data-role="secondary-muscles"]');
     if (!primary || primary.dataset.populated === '1') return;
-    D.MUSCLE_GROUPS.forEach(function (group) {
+    D.MUSCLE_GROUP_CONFIG.forEach(function (group) {
       var opt = document.createElement('option');
       opt.value = group.id;
       opt.textContent = group.label;
       primary.appendChild(opt);
-      if (secondary) {
-        var label = document.createElement('label');
-        label.className = 'muscle-check';
-        var input = document.createElement('input');
-        input.type = 'checkbox';
-        input.name = 'secondaryMuscleGroups';
-        input.value = group.id;
-        label.appendChild(input);
-        label.appendChild(document.createTextNode(' ' + group.label));
-        secondary.appendChild(label);
-      }
     });
     primary.dataset.populated = '1';
+    bindMuscleFormCascade(form);
   }
 
   function readMuscleGroupsFromForm(form) {
     var primaryEl = form.elements.primaryMuscleGroup;
-    var primary = primaryEl ? primaryEl.value : '';
-    var secondary = [];
-    form.querySelectorAll('input[name="secondaryMuscleGroups"]:checked').forEach(function (el) {
-      secondary.push(el.value);
-    });
-    return { primaryMuscleGroup: primary, secondaryMuscleGroups: secondary };
+    var secondaryEl = form.querySelector('[data-role="secondary-muscle"]');
+    var targetEl = form.querySelector('[data-role="target-area"]');
+    return {
+      primaryMuscleGroup: primaryEl ? primaryEl.value : '',
+      secondaryMuscleGroup: secondaryEl ? secondaryEl.value : '',
+      targetArea: targetEl ? targetEl.value : '',
+      secondaryMuscleGroups: []
+    };
   }
 
   function fillMuscleGroupsInForm(form, exercise) {
     populateMuscleGroupFields(form);
     var primaryEl = form.elements.primaryMuscleGroup;
     if (primaryEl) primaryEl.value = exercise.primaryMuscleGroup || '';
-    var secondary = Array.isArray(exercise.secondaryMuscleGroups) ? exercise.secondaryMuscleGroups : [];
-    form.querySelectorAll('input[name="secondaryMuscleGroups"]').forEach(function (el) {
-      el.checked = secondary.indexOf(el.value) >= 0;
-    });
+    populateSecondaryMuscleOptions(
+      form,
+      exercise.primaryMuscleGroup || '',
+      exercise.secondaryMuscleGroup || '',
+      exercise.targetArea || ''
+    );
   }
 
   function resetInstructionImagesState(mode) {
@@ -950,7 +1129,9 @@
     var fields = form.elements;
     var muscle = readMuscleGroupsFromForm(form);
     base.primaryMuscleGroup = muscle.primaryMuscleGroup;
-    base.secondaryMuscleGroups = muscle.secondaryMuscleGroups;
+    base.secondaryMuscleGroup = muscle.secondaryMuscleGroup;
+    base.targetArea = muscle.targetArea;
+    base.secondaryMuscleGroups = muscle.secondaryMuscleGroups || [];
     base.tips = fields.tips ? fields.tips.value : '';
     base.commonMistakes = fields.commonMistakes ? fields.commonMistakes.value : '';
     return base;
@@ -1442,13 +1623,22 @@
   }
 
   function renderLibrary() {
+    if (els.libraryMuscleFilter) {
+      renderMuscleFilterPanel(els.libraryMuscleFilter, libraryMuscleFilter, renderLibrary);
+    }
     if (!els.libraryList) return;
-    var exercises = (library && library.exercises) || [];
-    if (!exercises.length) {
+    var allExercises = (library && library.exercises) || [];
+    if (!allExercises.length) {
       els.libraryList.innerHTML = '<div class="card"><div class="name">Chưa có bài trong thư viện</div><div class="note">Bấm “+ Thêm bài tập” để tạo bài lẻ.</div></div>';
       return;
     }
-    els.libraryList.innerHTML = exercises.map(function (exercise, index) {
+    var exercises = getFilteredLibraryExercises();
+    if (!exercises.length) {
+      els.libraryList.innerHTML = '<div class="card"><div class="name">Không có bài phù hợp</div><div class="note">Thử chọn “Tất cả” hoặc đổi bộ lọc / từ khóa tìm kiếm.</div></div>';
+      return;
+    }
+    els.libraryList.innerHTML = exercises.map(function (exercise) {
+      var index = findLibraryExerciseIndexById(exercise.id);
       var muscleHtml = formatMuscleTagsHtml(exercise);
       return (
         '<div class="card" data-library-index="' + index + '">' +
@@ -1490,6 +1680,9 @@
     if (els.appHome) els.appHome.hidden = true;
     if (els.libraryScreen) els.libraryScreen.hidden = false;
     setWelcomePageActive(false);
+    if (els.librarySearch && document.activeElement !== els.librarySearch) {
+      libraryMuscleFilter.search = els.librarySearch.value || '';
+    }
     renderLibrary();
   }
 
@@ -1501,6 +1694,7 @@
     resetFormImageState('add');
     resetInstructionImagesState('add');
     populateMuscleGroupFields(els.addExerciseForm);
+    populateSecondaryMuscleOptions(els.addExerciseForm, '', '', '');
     els.addExerciseForm.elements.sets.value = 3;
     els.addExerciseForm.elements.reps.value = 12;
     els.addExerciseForm.elements.resistance.value = 0;
@@ -1600,18 +1794,26 @@
   }
 
   function renderPickExerciseList() {
+    if (els.pickMuscleFilter) {
+      renderMuscleFilterPanel(els.pickMuscleFilter, pickMuscleFilter, renderPickExerciseList);
+    }
     if (!els.pickExerciseList) return;
-    var exercises = getExerciseCatalog();
-    if (!exercises.length) {
-      els.pickExerciseList.innerHTML = '<div class="pick-empty">Chưa có bài tập. Hãy thêm bài ở “Tập theo bài”.</div>';
+    var allExercises = getExerciseCatalog();
+    if (!allExercises.length) {
+      els.pickExerciseList.innerHTML = '<div class="pick-empty">Chưa có bài tập. Hãy thêm bài ở “Bài tập lẻ”.</div>';
       return;
     }
-    els.pickExerciseList.innerHTML = exercises.map(function (exercise, index) {
+    var exercises = getFilteredCatalogExercises();
+    if (!exercises.length) {
+      els.pickExerciseList.innerHTML = '<div class="pick-empty">Không có bài phù hợp với bộ lọc hiện tại.</div>';
+      return;
+    }
+    els.pickExerciseList.innerHTML = exercises.map(function (exercise) {
       return (
         '<div class="card">' +
           '<div class="name">' + escapeHtml(exercise.name) + '</div>' +
           '<div class="meta">' + escapeHtml(D.formatExerciseMeta(exercise)) + '</div>' +
-          '<button type="button" class="btn" data-pick-index="' + index + '">Chọn bài này</button>' +
+          '<button type="button" class="btn" data-pick-id="' + escapeHtml(exercise.id) + '">Chọn bài này</button>' +
         '</div>'
       );
     }).join('');
@@ -2195,13 +2397,30 @@
       });
     }
 
+    if (els.librarySearch && !els.librarySearch.dataset.bound) {
+      els.librarySearch.dataset.bound = '1';
+      els.librarySearch.addEventListener('input', function () {
+        libraryMuscleFilter.search = els.librarySearch.value || '';
+        renderLibrary();
+      });
+    }
+
+    if (els.pickExerciseSearch && !els.pickExerciseSearch.dataset.bound) {
+      els.pickExerciseSearch.dataset.bound = '1';
+      els.pickExerciseSearch.addEventListener('input', function () {
+        pickMuscleFilter.search = els.pickExerciseSearch.value || '';
+        renderPickExerciseList();
+      });
+    }
+
     if (els.pickExerciseList) {
       document.getElementById('pick-exercise-close-btn').addEventListener('click', closePickExercise);
       els.pickExerciseList.addEventListener('click', function (event) {
-        var btn = event.target.closest('[data-pick-index]');
+        var btn = event.target.closest('[data-pick-id]');
         if (!btn) return;
+        var exerciseId = btn.dataset.pickId;
         var catalog = getExerciseCatalog();
-        var exercise = catalog[parseInt(btn.dataset.pickIndex, 10)];
+        var exercise = catalog.filter(function (ex) { return ex.id === exerciseId; })[0];
         if (!exercise) return;
         if (pickMode === 'session') pickExerciseForSession(exercise);
       });

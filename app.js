@@ -12,6 +12,7 @@
   var pickJumpAfterInsert = false;
   var activeSession = D.loadActiveSession();
   var restTimerId = null;
+  var restVisibilityBound = false;
   var resumePromptShown = false;
   var formImageState = {
     edit: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
@@ -1898,12 +1899,15 @@
     pickExerciseForSession(exercise, options);
   }
 
-  function clearRestTimer() {
+  function clearRestTimer(options) {
     if (restTimerId) {
       clearInterval(restTimerId);
       restTimerId = null;
     }
-    if (window.MyFitRestAudio) window.MyFitRestAudio.stopRestCountdownAudio();
+    // Do not stop audio when transitioning to Go cue — only when explicitly requested.
+    if (options && options.stopAudio && window.MyFitRestAudio) {
+      window.MyFitRestAudio.stopRestCountdownAudio();
+    }
   }
 
   function updateRestDisplay(seconds) {
@@ -1971,13 +1975,17 @@
     persistSession();
     hideOverlay(els.workoutOverlay);
     els.restLabel.textContent = kind === 'set' ? 'Nghỉ giữa SET' : 'Nghỉ giữa BÀI TẬP';
-    clearRestTimer();
-    if (window.MyFitRestAudio) window.MyFitRestAudio.resetCountdownAudio();
+    clearRestTimer({ stopAudio: true });
+    if (window.MyFitRestAudio) {
+      window.MyFitRestAudio.unlockRestAudio();
+      window.MyFitRestAudio.resetCountdownAudio();
+    }
     updateRestDisplay(seconds);
     updateRestActions();
     showOverlay(els.restOverlay, 'flex');
     if (window.MyFitRestAudio) window.MyFitRestAudio.handleRestCountdownTick(seconds);
-    restTimerId = setInterval(tickRest, 1000);
+    // 250ms keeps second boundaries accurate when the tab is briefly throttled.
+    restTimerId = setInterval(tickRest, 250);
   }
 
   function finishRestAdvance() {
@@ -2016,6 +2024,7 @@
       return;
     }
     persistSession();
+    // Keep Go clip playing — do not stopAudio here.
     clearRestTimer();
     if (window.MyFitRestAudio && window.MyFitRestAudio.playGoCue) {
       window.MyFitRestAudio.playGoCue(finishRestAdvance);
@@ -2027,7 +2036,7 @@
   function skipRest() {
     if (!activeSession) return;
     if (window.MyFitRestAudio) window.MyFitRestAudio.stopRestCountdownAudio();
-    clearRestTimer();
+    clearRestTimer({ stopAudio: true });
     activeSession.restEndTime = new Date().toISOString();
     activeSession.restRemaining = 0;
     finishRestAdvance();
@@ -2273,9 +2282,21 @@
     els.resumeBanner.style.display = 'none';
     activeSession = null;
     D.saveActiveSession(null);
-    clearRestTimer();
+    clearRestTimer({ stopAudio: true });
     hideOverlay(els.workoutOverlay);
     hideOverlay(els.restOverlay);
+  }
+
+  function bindRestVisibilityTick() {
+    if (typeof document === 'undefined' || restVisibilityBound) return;
+    restVisibilityBound = true;
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible') return;
+      if (!activeSession) return;
+      if (activeSession.phase !== 'rest-set' && activeSession.phase !== 'rest-exercise') return;
+      if (window.MyFitRestAudio) window.MyFitRestAudio.unlockRestAudio();
+      tickRest();
+    });
   }
 
   function bindWorkoutAudioUnlock() {
@@ -2307,6 +2328,7 @@
 
   function bindEvents() {
     bindWorkoutAudioUnlock();
+    bindRestVisibilityTick();
     document.querySelectorAll('.tab').forEach(function (tab) {
       tab.addEventListener('click', function () {
         selectWorkout(tab.dataset.workoutId);

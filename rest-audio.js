@@ -12,6 +12,7 @@
   var bufferCache = {};
   var bufferLoadPromise = null;
   var audioCtx = null;
+  var unlockListenersBound = false;
 
   function isIOS() {
     return /iPad|iPhone|iPod/.test(global.navigator && global.navigator.userAgent || '') ||
@@ -79,7 +80,7 @@
   function fetchDecodeBuffer(ctx, url) {
     return fetch(url)
       .then(function (response) {
-        if (!response.ok) throw new Error('fetch failed');
+        if (!response || !response.ok) throw new Error('fetch failed');
         return response.arrayBuffer();
       })
       .then(function (data) {
@@ -136,15 +137,25 @@
   function resumeAudioContext() {
     var ctx = getAudioContext();
     if (!ctx) return Promise.resolve();
-    if (ctx.state === 'suspended') return ctx.resume();
+    if (ctx.state === 'suspended') return ctx.resume().catch(function () {});
     return Promise.resolve();
   }
 
+  function removeUnlockListeners(unlockOnce) {
+    if (!global.document || !unlockOnce) return;
+    global.document.removeEventListener('touchstart', unlockOnce, true);
+    global.document.removeEventListener('pointerdown', unlockOnce, true);
+    global.document.removeEventListener('click', unlockOnce, true);
+  }
+
   function unlockRestAudio() {
+    var already = audioUnlocked;
     audioUnlocked = true;
     preloadClips();
     resumeAudioContext();
     loadAudioBuffers();
+    // Only prime HTML Audio once — re-playing on every tap interrupts countdown.
+    if (already) return;
     var primer = clipCache[1] || createHtmlAudio(getDigitClipSrc(1));
     clipCache[1] = primer;
     var prevVolume = primer.volume;
@@ -165,12 +176,14 @@
   }
 
   function bindGlobalUnlockOnce() {
-    if (bindGlobalUnlockOnce.done) return;
-    bindGlobalUnlockOnce.done = true;
+    if (unlockListenersBound || !global.document) return;
+    unlockListenersBound = true;
     var unlockOnce = function () {
       unlockRestAudio();
+      removeUnlockListeners(unlockOnce);
     };
     global.document.addEventListener('touchstart', unlockOnce, { capture: true, passive: true });
+    global.document.addEventListener('pointerdown', unlockOnce, { capture: true, passive: true });
     global.document.addEventListener('click', unlockOnce, { capture: true });
   }
 
@@ -192,7 +205,11 @@
     var ctx = getAudioContext();
     var buffer = bufferCache[key];
     if (!ctx || !buffer) return false;
-    if (ctx.state === 'suspended') ctx.resume();
+    // Suspended context "starts" silently on iOS — fall back to HTML Audio.
+    if (ctx.state !== 'running') {
+      resumeAudioContext();
+      return false;
+    }
     stopCurrentClip();
     var source = ctx.createBufferSource();
     var gain = ctx.createGain();
@@ -200,7 +217,11 @@
     gain.gain.value = key === GO_KEY ? 1 : 0.96;
     source.connect(gain);
     gain.connect(ctx.destination);
-    source.start(0);
+    try {
+      source.start(0);
+    } catch (err) {
+      return false;
+    }
     currentSource = source;
     source.onended = function () {
       if (currentSource === source) currentSource = null;
@@ -216,7 +237,9 @@
     }
     if (key === GO_KEY) clip.volume = 1;
     stopCurrentClip();
-    clip.currentTime = 0;
+    try {
+      clip.currentTime = 0;
+    } catch (err) {}
     currentClip = clip;
     var playPromise = clip.play();
     if (playPromise && typeof playPromise.catch === 'function') {
@@ -228,14 +251,11 @@
   }
 
   function playClipKey(key, src, fallbackText) {
+    // Prefer immediate HTML playback so countdown never waits on buffer decode.
+    // Use Web Audio only when context is already running and buffer is ready.
     if (bufferCache[key] && playBufferKey(key)) return Promise.resolve();
-    if (audioUnlocked && bufferLoadPromise) {
-      return bufferLoadPromise.then(function () {
-        if (bufferCache[key] && playBufferKey(key)) return;
-        playHtmlKey(key, src, fallbackText);
-      });
-    }
     playHtmlKey(key, src, fallbackText);
+    if (audioUnlocked) loadAudioBuffers();
     return Promise.resolve();
   }
 
@@ -253,7 +273,10 @@
       hooks.speak(String(digit));
       return;
     }
-    if (!audioUnlocked) preloadClips();
+    if (!audioUnlocked) {
+      preloadClips();
+      // Still attempt playback — may work after prior gesture; unlock if possible.
+    }
     resumeAudioContext();
     playClipDigit(digit);
   }
@@ -302,23 +325,23 @@
     }
     if (!audioUnlocked) preloadClips();
     resumeAudioContext();
-    var clip = null;
+    var doneCalled = false;
     var done = function () {
+      if (doneCalled) return;
+      doneCalled = true;
       clearGoCallbackTimer();
       if (typeof onDone === 'function') onDone();
     };
     playClipKey(GO_KEY, getGoClipSrc(), 'Go').then(function () {
-      clip = clipCache[GO_KEY] || null;
-      if (clip && typeof clip.addEventListener === 'function') {
+      var clip = currentClip || clipCache[GO_KEY] || null;
+      if (clip && typeof clip.addEventListener === 'function' && currentClip === clip) {
         var onEnded = function () {
           clip.removeEventListener('ended', onEnded);
           done();
         };
         clip.addEventListener('ended', onEnded);
-        goCallbackTimer = setTimeout(done, 900);
-      } else {
-        goCallbackTimer = setTimeout(done, 700);
       }
+      goCallbackTimer = setTimeout(done, 900);
     });
     return { played: true, digit: 'Go' };
   }

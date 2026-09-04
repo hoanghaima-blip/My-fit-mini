@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="43"'), 'version meta is 43');
-    assert(html.includes('data.js?v=43'), 'script cache bust v43');
+    assert(html.includes('myfit-version" content="45"'), 'version meta is 45');
+    assert(html.includes('data.js?v=45'), 'script cache bust v45');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v43'), 'service worker cache v43');
-    assert(sw.includes('APP_VERSION = \'43\''), 'service worker APP_VERSION v43');
+    assert(sw.includes('my-fit-mini-v45'), 'service worker cache v45');
+    assert(sw.includes('APP_VERSION = \'45\''), 'service worker APP_VERSION v45');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v43 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v45 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -1425,6 +1425,21 @@ async function run() {
     spoken.length = 0;
     RA.handleRestCountdownTick(18, hooks);
     assert(spoken.length === 0, 'addRestSeconds cancels countdown until last 5 again');
+
+    // Immediate HTML playback path must not wait on buffers (silent hang fix)
+    RA.resetCountdownAudio();
+    spoken.length = 0;
+    RA.unlockRestAudio();
+    RA.speakCountdownDigit(5, hooks);
+    assert(spoken.join(',') === '5', 'speakCountdownDigit works with hooks without buffers');
+
+    // Rapid 250ms-style ticks must not skip digits when seconds change
+    RA.resetCountdownAudio();
+    spoken.length = 0;
+    [5.9, 5.2, 4.9, 4.1, 3.8, 3.0, 2.4, 2.0, 1.6, 1.0].forEach(function (sec) {
+      RA.handleRestCountdownTick(sec, hooks);
+    });
+    assert(spoken.join(',') === '5,4,3,2,1', 'fractional remaining still announces each digit once');
 
     pass('TEST 29: rest countdown audio last 5 seconds');
     dom.window.close();

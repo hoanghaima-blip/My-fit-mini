@@ -378,7 +378,18 @@
     var tmp = swapped[index];
     swapped[index] = swapped[target];
     swapped[target] = tmp;
-    D.setDayOrder(currentWorkoutId, swapped.map(function (ex) { return ex.id; }));
+    var orderIds = swapped.map(function (ex) { return ex.id; });
+    D.setDayOrder(currentWorkoutId, orderIds);
+    // Keep the live workout session in sync — reorder must not drop session data.
+    if (
+      activeSession &&
+      activeSession.phase !== 'complete' &&
+      activeSession.sessionKind !== 'library' &&
+      activeSession.workoutId === currentWorkoutId
+    ) {
+      D.reorderSessionExercisesByIds(activeSession, orderIds);
+      persistSession();
+    }
     renderAll();
   }
 
@@ -386,9 +397,19 @@
     var workout = getWorkout(currentWorkoutId);
     if (!workout) return;
     var ordered = getDisplayedExercises();
+    var orderIds = ordered.map(function (ex) { return ex.id; });
     workout.exercises = ordered.slice();
     persistWorkouts();
     D.clearDayOrder(currentWorkoutId);
+    if (
+      activeSession &&
+      activeSession.phase !== 'complete' &&
+      activeSession.sessionKind !== 'library' &&
+      activeSession.workoutId === currentWorkoutId
+    ) {
+      D.reorderSessionExercisesByIds(activeSession, orderIds);
+      persistSession();
+    }
     renderAll();
   }
   function renderHistory() {
@@ -443,12 +464,19 @@
       '<div class="history-row"><span>Sets planned / actual</span><strong>' + summary.plannedSets + ' / ' + summary.actualSets + '</strong></div>' +
       '<div class="history-detail-list">';
 
-    (entry.exercises || []).slice().sort(function (a, b) {
-      var ao = a.actualOrder != null ? a.actualOrder : 9999;
-      var bo = b.actualOrder != null ? b.actualOrder : 9999;
-      if (ao !== bo) return ao - bo;
-      return (a.scheduledOrder || 9999) - (b.scheduledOrder || 9999);
-    }).forEach(function (item, globalIndex) {
+    var orderedExercises = (function () {
+      var list = entry.exercises || [];
+      var hasSessionOrder = list.length > 0 && list.every(function (item) {
+        return item && item.sessionOrder != null;
+      });
+      if (hasSessionOrder) {
+        return list.slice().sort(function (a, b) {
+          return (a.sessionOrder || 0) - (b.sessionOrder || 0);
+        });
+      }
+      return D.sortExercisesByActualOrder(list);
+    })();
+    orderedExercises.forEach(function (item, globalIndex) {
       var snap = item.snapshot || {};
       var status = item.completionStatus || 'pending';
       var roleBadge = item.role === 'supplemental' ? ' · Bổ sung' : '';
@@ -474,7 +502,7 @@
     els.historyDetailContent.innerHTML = html;
     showOverlay(els.historyDetailOverlay);
 
-    entry.exercises.forEach(function (item, i) {
+    orderedExercises.forEach(function (item, i) {
       var block = els.historyDetailContent.querySelector('[data-history-ex="' + i + '"]');
       var slot = block && block.querySelector('[data-image-slot]');
       if (!slot) return;
@@ -2135,8 +2163,23 @@
   }
 
   function startWorkout(fromExerciseIndex) {
-    if (activeSession && !resumePromptShown) return;
+    // Resume existing session for this schedule instead of wiping progress / exercises.
+    if (
+      activeSession &&
+      activeSession.phase !== 'complete' &&
+      activeSession.workoutId === currentWorkoutId &&
+      activeSession.sessionKind !== 'library'
+    ) {
+      resumePromptShown = true;
+      if (typeof fromExerciseIndex === 'number') {
+        jumpToExerciseIndex(fromExerciseIndex);
+      } else {
+        showWorkoutView();
+      }
+      return;
+    }
     var workout = getWorkout(currentWorkoutId);
+    if (!workout) return;
     activeSession = D.createWorkoutSession(workout);
     if (typeof fromExerciseIndex === 'number') {
       activeSession.currentExerciseIndex = fromExerciseIndex;
@@ -2216,7 +2259,9 @@
     var historyEntry = D.finalizeHistoryEntry(activeSession);
     var history = D.loadHistory();
     history.unshift(historyEntry);
-    D.saveHistory(history);
+    if (!D.saveHistory(history)) {
+      console.error('Failed to save workout history');
+    }
 
     var completedExercises = activeSession.exercises.filter(function (item) {
       return item.completionStatus === 'completed';

@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="43"'), 'version meta is 43');
-    assert(html.includes('data.js?v=43'), 'script cache bust v43');
+    assert(html.includes('myfit-version" content="46"'), 'version meta is 46');
+    assert(html.includes('data.js?v=46'), 'script cache bust v46');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,15 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v43'), 'service worker cache v43');
-    assert(sw.includes('APP_VERSION = \'43\''), 'service worker APP_VERSION v43');
+    assert(sw.includes('my-fit-mini-v46'), 'service worker cache v46');
+    assert(sw.includes('APP_VERSION = \'46\''), 'service worker APP_VERSION v46');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v43 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v46 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -2166,6 +2166,172 @@ async function run() {
     pass('TEST 38: muscle group config filter library pick edit image preserved');
   } catch (err) {
     fail('TEST 38', err);
+  }
+
+  // TEST 39: schedule reorder during session → history keeps ALL exercises in session order
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const D = window.MyFitData;
+    const app = window.MyFitApp;
+    const doc = window.document;
+
+    // Preserve an older history entry to prove immutability
+    const oldHistory = [{
+      id: 'session-old',
+      workoutSessionId: 'session-old',
+      date: '2026-01-01',
+      workoutId: 'a',
+      workoutName: 'Old Glutes A',
+      startTime: '2026-01-01T08:00:00.000Z',
+      endTime: '2026-01-01T08:40:00.000Z',
+      estimatedDuration: 1800,
+      actualDuration: 2400,
+      exercises: [{
+        exerciseId: 'old-ex',
+        snapshot: { id: 'old-ex', name: 'Old Only Exercise', sets: 2, reps: 10, resistance: 5, resistanceType: 'kg', image: 'assets/old.jpg' },
+        role: 'scheduled',
+        scheduledOrder: 1,
+        actualOrder: 1,
+        plannedSets: 2,
+        actualSetsCompleted: 2,
+        setLogs: [
+          { setNumber: 1, resistance: 5, resistanceType: 'kg', reps: 10, completed: true },
+          { setNumber: 2, resistance: 5, resistanceType: 'kg', reps: 10, completed: true }
+        ],
+        completionStatus: 'completed'
+      }]
+    }];
+    D.saveHistory(oldHistory);
+
+    app.setActiveSession(null);
+    app.selectWorkout('a');
+    const template = app.getWorkouts().a;
+    assert(template.exercises.length === 6, 'T2 schedule has 6 exercises');
+    const originalTemplateIds = template.exercises.map((ex) => ex.id);
+    const originalTemplateName0 = template.exercises[0].name;
+
+    app.startWorkout(0);
+    let session = app.getActiveSession();
+    assert(session.exercises.length === 6, 'session copies all 6 exercises');
+    const sessionId = session.id;
+    const beforeReorderNames = session.exercises.map((ex) => ex.snapshot.name);
+
+    // Log sets on multiple exercises before reorder
+    session.exercises[0].setLogs[0].resistance = 20;
+    session.exercises[0].setLogs[0].reps = 12;
+    session.exercises[0].setLogs[0].completed = true;
+    session.exercises[0].actualSetsCompleted = 1;
+    session.exercises[0].completionStatus = 'in-progress';
+
+    session.exercises[2].setLogs[0].resistance = 40;
+    session.exercises[2].setLogs[0].reps = 10;
+    session.exercises[2].setLogs[0].completed = true;
+    session.exercises[2].setLogs[1].resistance = 42;
+    session.exercises[2].setLogs[1].reps = 8;
+    session.exercises[2].setLogs[1].completed = true;
+    session.exercises[2].actualSetsCompleted = 2;
+    session.exercises[2].completionStatus = 'in-progress';
+
+    // Reorder while session is active via UI moves → session must sync
+    // Move former #3 (index 2) to front: up, up
+    app.moveDisplayedExercise(2, -1);
+    app.moveDisplayedExercise(1, -1);
+    session = app.getActiveSession();
+    assert(session.exercises.length === 6, 'reorder keeps all session exercises');
+    assert(session.id === sessionId, 'same session after reorder');
+    const afterNames = session.exercises.map((ex) => ex.snapshot.name);
+    assert(afterNames[0] === beforeReorderNames[2], 'session first is former #3');
+    assert(afterNames[1] === beforeReorderNames[0], 'session second is former #1');
+    assert(afterNames.join('|') !== beforeReorderNames.join('|'), 'session order changed');
+
+    // Set logs survived reorder (former index 0 / 2 moved with the exercise)
+    const movedFirst = session.exercises.find((ex) => ex.snapshot.name === beforeReorderNames[0]);
+    const movedThird = session.exercises.find((ex) => ex.snapshot.name === beforeReorderNames[2]);
+    assert(movedFirst && movedFirst.setLogs[0].resistance === 20, 'set log moved with exercise');
+    assert(movedThird && movedThird.setLogs[1].resistance === 42, 'multi-set logs preserved on moved exercise');
+
+    // Clicking Bắt đầu again must RESUME, not wipe
+    doc.getElementById('start-workout-btn').click();
+    session = app.getActiveSession();
+    assert(session.id === sessionId, 'Bắt đầu resumes same session');
+    assert(session.exercises.length === 6, 'resume keeps all exercises');
+    assert(session.exercises[1].setLogs[0].resistance === 20, 'resume keeps set logs');
+
+    // Complete every exercise; verify set logs persist through finish
+    for (let ex = 0; ex < 6; ex += 1) {
+      session = app.getActiveSession();
+      if (!session) break;
+      session.currentExerciseIndex = ex;
+      const item = session.exercises[ex];
+      const sets = item.snapshot.sets;
+      for (let set = 1; set <= sets; set += 1) {
+        session = app.getActiveSession();
+        if (!session) break;
+        session.currentExerciseIndex = ex;
+        session.currentSet = set;
+        session.phase = 'exercise';
+        app.showWorkoutView();
+        const resistanceInput = doc.getElementById('w-set-resistance');
+        if (resistanceInput) resistanceInput.value = String(100 + ex * 10 + set);
+        app.completeSet();
+        if (set < sets && app.getActiveSession()) app.finishRestAdvance();
+      }
+      if (app.getActiveSession() && app.getActiveSession().phase !== 'complete') {
+        try { app.finishRestAdvance(); } catch (e) { /* finished */ }
+      }
+    }
+
+    assert(!app.getActiveSession(), 'workout finished');
+    const history = D.loadHistory();
+    assert(history.length === 2, 'new history prepended; old entry kept');
+    assert(history[1].id === 'session-old', 'old history untouched at tail');
+    assert(history[1].exercises.length === 1, 'old history still one exercise');
+    assert(history[1].exercises[0].snapshot.name === 'Old Only Exercise', 'old snapshot name immutable');
+
+    const entry = history[0];
+    assert(entry.workoutSessionId === sessionId, 'history stores workoutSessionId');
+    assert(entry.exercises.length === 6, 'history has all 6 exercises after reorder');
+    assert(
+      entry.exercises.map((ex) => ex.snapshot.name).join('|') === afterNames.join('|'),
+      'history order matches reordered session order'
+    );
+    const completed = entry.exercises.filter((ex) => ex.completionStatus === 'completed');
+    assert(completed.length === 6, 'all exercises completed in history');
+    assert(entry.exercises.every((ex) => Array.isArray(ex.setLogs) && ex.setLogs.some((log) => log.completed)), 'each exercise keeps completed setLogs');
+    const summary = D.summarizeHistoryEntry(entry);
+    assert(summary.exerciseCount === 6, 'summary counts 6 exercises');
+    assert(summary.actualSets >= 6, 'summary has actual sets from multiple exercises');
+
+    // Mutate template after history save — history must not change
+    app.getWorkouts().a.exercises[0].name = 'TEMPLATE RENAMED';
+    app.getWorkouts().a.exercises[0].image = 'assets/renamed.jpg';
+    D.saveWorkouts(app.getWorkouts());
+    const histReload = D.loadHistory();
+    assert(histReload[0].exercises.length === 6, 'history still 6 after template edit');
+    assert(
+      !histReload[0].exercises.some((ex) => ex.snapshot.name === 'TEMPLATE RENAMED'),
+      'history names independent from template'
+    );
+    assert(histReload[1].exercises[0].snapshot.name === 'Old Only Exercise', 'older history still intact');
+
+    // Template order change must not shrink/alter saved history
+    app.getWorkouts().a.exercises = app.getWorkouts().a.exercises.slice().reverse();
+    D.saveWorkouts(app.getWorkouts());
+    assert(D.loadHistory()[0].exercises.length === 6, 'history count stable after template reorder');
+    assert(originalTemplateIds.length === 6 && originalTemplateName0, 'sanity original template');
+
+    app.openHistoryDetail(0);
+    const detailHtml = doc.getElementById('history-detail-content').innerHTML;
+    assert((detailHtml.match(/history-exercise/g) || []).length === 6, 'history detail renders 6 exercises');
+    afterNames.forEach((name) => {
+      assert(detailHtml.indexOf(name) >= 0, 'detail shows ' + name);
+    });
+
+    dom.window.close();
+    pass('TEST 39: reorder during session preserves full history snapshot');
+  } catch (err) {
+    fail('TEST 39', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

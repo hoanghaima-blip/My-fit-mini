@@ -1160,23 +1160,34 @@
 
   function migrateHistoryEntry(entry) {
     if (!entry || !Array.isArray(entry.exercises)) return entry;
+    if (!entry.workoutSessionId && entry.id) entry.workoutSessionId = entry.id;
     entry.exercises = entry.exercises.map(function (item, index) {
       var next = ensureSetLogs(clone(item));
       if (next.role !== 'supplemental' && next.scheduledOrder == null) {
         next.scheduledOrder = index + 1;
       }
+      if (next.sessionOrder == null) next.sessionOrder = index + 1;
       if (next.actualOrder == null && next.completionStatus === 'completed') {
         next.actualOrder = index + 1;
       }
       return next;
     });
-    entry.exercises.sort(function (a, b) {
-      var ao = a.actualOrder != null ? a.actualOrder : 9999;
-      var bo = b.actualOrder != null ? b.actualOrder : 9999;
-      if (ao !== bo) return ao - bo;
-      var so = (a.scheduledOrder || 9999) - (b.scheduledOrder || 9999);
-      return so;
+    var hasSessionOrder = entry.exercises.every(function (item) {
+      return item && item.sessionOrder != null;
     });
+    if (hasSessionOrder) {
+      entry.exercises.sort(function (a, b) {
+        return (a.sessionOrder || 0) - (b.sessionOrder || 0);
+      });
+    } else {
+      entry.exercises.sort(function (a, b) {
+        var ao = a.actualOrder != null ? a.actualOrder : 9999;
+        var bo = b.actualOrder != null ? b.actualOrder : 9999;
+        if (ao !== bo) return ao - bo;
+        var so = (a.scheduledOrder || 9999) - (b.scheduledOrder || 9999);
+        return so;
+      });
+    }
     return entry;
   }
 
@@ -1200,7 +1211,17 @@
   }
 
   function saveHistory(history) {
-    writeJson(STORAGE_KEYS.history, Array.isArray(history) ? history : []);
+    var payload = Array.isArray(history) ? history : [];
+    if (writeJson(STORAGE_KEYS.history, payload)) return true;
+    // Retry with heavy image payloads stripped so a full session is never lost.
+    var stripped = clone(payload);
+    stripped.forEach(function (entry) {
+      if (!entry || !Array.isArray(entry.exercises)) return;
+      entry.exercises.forEach(function (item) {
+        if (item && item.snapshot) stripHeavyExerciseRecord(item.snapshot);
+      });
+    });
+    return writeJson(STORAGE_KEYS.history, stripped);
   }
 
   function saveActiveSession(session) {
@@ -1474,6 +1495,9 @@
       var ao = a.actualOrder != null ? a.actualOrder : 9999;
       var bo = b.actualOrder != null ? b.actualOrder : 9999;
       if (ao !== bo) return ao - bo;
+      var so = a.sessionOrder != null ? a.sessionOrder : (a.scheduledOrder || 9999);
+      var to = b.sessionOrder != null ? b.sessionOrder : (b.scheduledOrder || 9999);
+      if (so !== to) return so - to;
       return (a.scheduledOrder || 9999) - (b.scheduledOrder || 9999);
     });
   }
@@ -1535,6 +1559,112 @@
     return ordered;
   }
 
+  function sessionExerciseKey(item) {
+    if (!item) return '';
+    if (item.exerciseId) return String(item.exerciseId);
+    if (item.snapshot && item.snapshot.id) return String(item.snapshot.id);
+    return '';
+  }
+
+  function renumberScheduledOrders(sessionExercises) {
+    var order = 0;
+    (sessionExercises || []).forEach(function (item) {
+      if (!item || item.role === 'supplemental') return;
+      order += 1;
+      item.scheduledOrder = order;
+    });
+    return sessionExercises;
+  }
+
+  /**
+   * Reorder active-session exercises to match schedule order ids.
+   * Preserves every session item (set logs, completion, supplementals).
+   * Supplementals keep relative position after the scheduled item they followed.
+   */
+  function reorderSessionExercisesByIds(session, orderIds) {
+    if (!session || !Array.isArray(session.exercises) || !Array.isArray(orderIds)) {
+      return session;
+    }
+    var list = session.exercises.slice();
+    var currentKey = sessionExerciseKey(list[session.currentExerciseIndex]);
+
+    var scheduled = [];
+    var followingSupplemental = {};
+    var leadingSupplemental = [];
+    var lastScheduledKey = null;
+
+    list.forEach(function (item) {
+      if (!item) return;
+      if (item.role === 'supplemental') {
+        if (lastScheduledKey == null) leadingSupplemental.push(item);
+        else {
+          if (!followingSupplemental[lastScheduledKey]) followingSupplemental[lastScheduledKey] = [];
+          followingSupplemental[lastScheduledKey].push(item);
+        }
+        return;
+      }
+      var key = sessionExerciseKey(item);
+      scheduled.push(item);
+      lastScheduledKey = key;
+    });
+
+    var byKey = {};
+    scheduled.forEach(function (item) {
+      var key = sessionExerciseKey(item);
+      if (key && !byKey[key]) byKey[key] = item;
+    });
+
+    var reorderedScheduled = [];
+    var seen = {};
+    orderIds.forEach(function (id) {
+      var key = String(id || '');
+      if (byKey[key] && !seen[key]) {
+        reorderedScheduled.push(byKey[key]);
+        seen[key] = true;
+      }
+    });
+    scheduled.forEach(function (item) {
+      var key = sessionExerciseKey(item);
+      if (key && !seen[key]) {
+        reorderedScheduled.push(item);
+        seen[key] = true;
+      }
+    });
+
+    var next = leadingSupplemental.slice();
+    reorderedScheduled.forEach(function (item) {
+      next.push(item);
+      var key = sessionExerciseKey(item);
+      (followingSupplemental[key] || []).forEach(function (supp) {
+        next.push(supp);
+      });
+    });
+
+    // Any supplemental whose anchor disappeared — append to keep data.
+    Object.keys(followingSupplemental).forEach(function (key) {
+      if (seen[key]) return;
+      followingSupplemental[key].forEach(function (supp) {
+        next.push(supp);
+      });
+    });
+
+    renumberScheduledOrders(next);
+    session.exercises = next;
+
+    if (currentKey) {
+      var newIndex = -1;
+      for (var i = 0; i < next.length; i += 1) {
+        if (sessionExerciseKey(next[i]) === currentKey) {
+          newIndex = i;
+          break;
+        }
+      }
+      if (newIndex >= 0) session.currentExerciseIndex = newIndex;
+      else session.currentExerciseIndex = Math.min(session.currentExerciseIndex || 0, next.length - 1);
+    }
+    return session;
+  }
+
   function getOrderedWorkoutExercises(workout, dateStr) {
     if (!workout) return [];
     var order = getDayOrder(workout.id, dateStr);
@@ -1544,12 +1674,16 @@
 
   function createWorkoutSession(workout, options) {
     options = options || {};
-    var exercises = options.exercises
+    // Deep-copy template/day-order list into independent session snapshots.
+    var sourceExercises = options.exercises
       ? options.exercises.slice()
       : getOrderedWorkoutExercises(workout, options.date || todayKey());
     var role = options.defaultRole || 'scheduled';
+    var exercises = sourceExercises.map(function (exercise) {
+      return clone(exercise);
+    });
     return {
-      id: 'session-' + Date.now(),
+      id: 'session-' + Date.now() + '-' + Math.floor(Math.random() * 100000),
       workoutId: workout.id,
       workoutName: options.workoutName || workout.title,
       sessionKind: options.sessionKind || 'schedule',
@@ -1575,18 +1709,40 @@
     };
   }
 
+  function cloneHistoryExercise(item, index) {
+    var next = clone(ensureSessionExerciseShape(item, index));
+    if (next.snapshot) {
+      stripHeavyExerciseRecord(next.snapshot);
+    }
+    next.sessionOrder = index + 1;
+    return next;
+  }
+
+  function assignMissingActualOrders(exercises) {
+    var max = 0;
+    (exercises || []).forEach(function (item) {
+      if (item && item.actualOrder != null && item.actualOrder > max) max = item.actualOrder;
+    });
+    (exercises || []).forEach(function (item) {
+      if (!item || item.completionStatus !== 'completed') return;
+      if (item.actualOrder != null) return;
+      max += 1;
+      item.actualOrder = max;
+    });
+    return exercises;
+  }
+
   function finalizeHistoryEntry(session) {
     var end = session.endTime ? new Date(session.endTime).getTime() : Date.now();
     var start = new Date(session.startTime).getTime();
+    // Independent immutable snapshot in SESSION order (includes user reorders).
     var exercises = (session.exercises || []).map(function (item, index) {
-      var next = clone(ensureSessionExerciseShape(item, index));
-      if (next.completionStatus === 'completed' && next.actualOrder == null) {
-        assignActualOrder(session, next);
-      }
-      return next;
+      return cloneHistoryExercise(item, index);
     });
+    assignMissingActualOrders(exercises);
     return {
       id: session.id,
+      workoutSessionId: session.id,
       date: session.date,
       workoutId: session.workoutId,
       workoutName: session.workoutName,
@@ -1595,7 +1751,7 @@
       endTime: session.endTime,
       estimatedDuration: session.estimatedDuration,
       actualDuration: Math.max(0, Math.round((end - start) / 1000)),
-      exercises: sortExercisesByActualOrder(exercises)
+      exercises: exercises
     };
   }
 
@@ -1791,6 +1947,8 @@
     sortExercisesByActualOrder: sortExercisesByActualOrder,
     createWorkoutSession: createWorkoutSession,
     finalizeHistoryEntry: finalizeHistoryEntry,
+    reorderSessionExercisesByIds: reorderSessionExercisesByIds,
+    applyOrderToExercises: applyOrderToExercises,
     createSetLogs: createSetLogs,
     ensureSetLogs: ensureSetLogs,
     formatSetLogLine: formatSetLogLine,
@@ -1803,7 +1961,6 @@
     setDayOrder: setDayOrder,
     clearDayOrder: clearDayOrder,
     getOrderedWorkoutExercises: getOrderedWorkoutExercises,
-    applyOrderToExercises: applyOrderToExercises,
     todayKey: todayKey,
     getTodayWeekIndex: getTodayWeekIndex,
     getTodayWorkoutId: getTodayWorkoutId,

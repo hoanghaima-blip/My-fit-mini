@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="50"'), 'version meta is 50');
-    assert(html.includes('data.js?v=50'), 'script cache bust v50');
+    assert(html.includes('myfit-version" content="51"'), 'version meta is 51');
+    assert(html.includes('data.js?v=51'), 'script cache bust v51');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,8 +617,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v50'), 'service worker cache v50');
-    assert(sw.includes('APP_VERSION = \'50\''), 'service worker APP_VERSION v50');
+    assert(sw.includes('my-fit-mini-v51'), 'service worker cache v51');
+    assert(sw.includes('APP_VERSION = \'51\''), 'service worker APP_VERSION v51');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
@@ -626,10 +626,13 @@ async function run() {
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
     assert(html.includes('welcome-stopwatch-btn'), 'welcome stopwatch entry');
+    assert(html.includes('MyFitApp.welcomeOpenStopwatch'), 'welcome stopwatch wired via onclick');
     assert(html.includes('open-stopwatch-btn'), 'home stopwatch entry');
     assert(html.includes('stopwatch-overlay'), 'stopwatch overlay in HTML');
     assert(html.includes('Đồng hồ bấm giờ'), 'stopwatch label in HTML');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v50 + workout management');
+    assert(html.includes('stopwatch-back'), 'stopwatch back control');
+    assert(sw.includes('?v='), 'SW special-cases versioned assets');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v51 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -2192,8 +2195,9 @@ async function run() {
 
     // Stacking: stopwatch must sit above welcome or tap looks like a no-op
     const welcomeZ = Number((css.match(/\.welcome-screen\{[^}]*z-index:(\d+)/) || [])[1] || 0);
-    const stopwatchZ = Number((css.match(/\.stopwatch-screen\{z-index:(\d+)\}/) || [])[1] || 0);
+    const stopwatchZ = Number((css.match(/\.stopwatch-screen\{[^}]*z-index:(\d+)/) || [])[1] || 0);
     assert(welcomeZ > 0 && stopwatchZ > welcomeZ, 'stopwatch z-index above welcome (' + stopwatchZ + '>' + welcomeZ + ')');
+    assert(css.includes('pointer-events:none') && css.includes('.stopwatch-screen'), 'hidden stopwatch does not intercept taps');
 
     const historyBefore = (window.MyFitData.loadHistory && window.MyFitData.loadHistory()) || [];
     const historyLenBefore = Array.isArray(historyBefore) ? historyBefore.length : 0;
@@ -2235,6 +2239,7 @@ async function run() {
     doc.getElementById('stopwatch-close-btn').click();
     assert(overlay.style.display === 'none', 'close hides overlay');
     assert(welcome && !welcome.hidden, 'close returns to welcome');
+    assert(doc.getElementById('stopwatch-close-btn').textContent.indexOf('Quay lại') !== -1, 'stopwatch has Quay lại control');
     assert(!app.getActiveSession(), 'still no workout session after stopwatch');
     const historyAfter = (window.MyFitData.loadHistory && window.MyFitData.loadHistory()) || [];
     assert(Array.isArray(historyAfter) && historyAfter.length === historyLenBefore, 'stopwatch does not write history');

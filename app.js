@@ -190,12 +190,15 @@
   }
 
   function hideOverlay(el) {
-    if (el) el.style.display = 'none';
+    if (!el) return;
+    el.style.display = 'none';
+    el.style.pointerEvents = 'none';
   }
 
   function showOverlay(el, mode) {
     if (!el) return;
     el.style.display = mode || 'flex';
+    el.style.pointerEvents = 'auto';
   }
 
   function persistWorkouts() {
@@ -2016,7 +2019,10 @@
   }
 
   function openStopwatch(options) {
-    options = options || {};
+    // Guard: addEventListener may pass a click Event as the first arg.
+    if (!options || typeof options !== 'object' || options instanceof Event || options.type === 'click') {
+      options = {};
+    }
     stopwatchReturnToWelcome = !!options.fromWelcome;
     updateStopwatchDisplay();
     updateStopwatchControls();
@@ -2028,6 +2034,7 @@
     if (els.stopwatchOverlay) {
       // Inline z-index beats stale cached stylesheets that still use z-index:40.
       els.stopwatchOverlay.style.zIndex = '100';
+      els.stopwatchOverlay.style.pointerEvents = 'auto';
     }
     showOverlay(els.stopwatchOverlay, 'flex');
   }
@@ -2601,8 +2608,18 @@
     var libraryToScheduleBtn = document.getElementById('library-to-schedule-btn');
     if (welcomeScheduleBtn) welcomeScheduleBtn.addEventListener('click', welcomeOpenSchedule);
     if (welcomeLibraryBtn) welcomeLibraryBtn.addEventListener('click', welcomeOpenLibrary);
-    if (welcomeStopwatchBtn) welcomeStopwatchBtn.addEventListener('click', welcomeOpenStopwatch);
-    if (openStopwatchBtn) openStopwatchBtn.addEventListener('click', openStopwatch);
+    // Direct listeners + HTML onclick backup; ignore event object if passed as options.
+    if (welcomeStopwatchBtn) {
+      welcomeStopwatchBtn.addEventListener('click', function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        welcomeOpenStopwatch();
+      });
+    }
+    if (openStopwatchBtn) {
+      openStopwatchBtn.addEventListener('click', function () {
+        openStopwatch();
+      });
+    }
     if (els.stopwatchToggleBtn) els.stopwatchToggleBtn.addEventListener('click', toggleStopwatch);
     if (els.stopwatchResetBtn) els.stopwatchResetBtn.addEventListener('click', resetStopwatch);
     if (els.stopwatchCloseBtn) els.stopwatchCloseBtn.addEventListener('click', closeStopwatch);

@@ -1,15 +1,15 @@
-const CACHE_NAME = 'my-fit-mini-v50';
-const APP_VERSION = '50';
+const CACHE_NAME = 'my-fit-mini-v51';
+const APP_VERSION = '51';
 
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './styles.css?v=50',
-  './data.js?v=50',
-  './images.js?v=50',
-  './rest-audio.js?v=50',
-  './app.js?v=50',
+  './styles.css?v=51',
+  './data.js?v=51',
+  './images.js?v=51',
+  './rest-audio.js?v=51',
+  './app.js?v=51',
   './styles.css',
   './data.js',
   './images.js',
@@ -86,6 +86,22 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(() => caches.match(request).then(cached => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Versioned assets (?v=) — network first so stopwatch/UI fixes deploy immediately.
+  if (request.url.indexOf('?v=') !== -1) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
     );
     return;
   }

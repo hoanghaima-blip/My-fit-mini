@@ -21,6 +21,7 @@
   var stopwatchFinished = false;
   var stopwatchSessionStarted = false;
   var stopwatchShowGoLabel = false;
+  var stopwatchOpening = false;
   var resumePromptShown = false;
   var formImageState = {
     edit: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
@@ -2057,7 +2058,25 @@
     }
   }
 
+  function tickFreeCountdown() {
+    if (!stopwatchRunning) return;
+    var ms = getStopwatchRemainingMs();
+    var secs = getStopwatchDisplaySeconds();
+    updateStopwatchDisplay();
+    if (ms <= 0) {
+      finishFreeCountdown();
+      return;
+    }
+    syncFreeCountdownAudio(secs);
+  }
+
+  function startStopwatchTicker() {
+    clearStopwatchTicker();
+    stopwatchTimerId = setInterval(tickFreeCountdown, 200);
+  }
+
   function finishFreeCountdown() {
+    if (stopwatchFinished && !stopwatchRunning) return;
     stopwatchRunning = false;
     stopwatchRemainingMs = 0;
     stopwatchFinished = true;
@@ -2076,22 +2095,6 @@
     } else {
       afterGo();
     }
-  }
-
-  function tickFreeCountdown() {
-    var ms = getStopwatchRemainingMs();
-    var secs = getStopwatchDisplaySeconds();
-    updateStopwatchDisplay();
-    if (ms <= 0) {
-      finishFreeCountdown();
-      return;
-    }
-    syncFreeCountdownAudio(secs);
-  }
-
-  function startStopwatchTicker() {
-    clearStopwatchTicker();
-    stopwatchTimerId = setInterval(tickFreeCountdown, 200);
   }
 
   function resetFreeCountdownState() {
@@ -2162,6 +2165,7 @@
       stopwatchShowGoLabel = false;
       if (window.MyFitRestAudio) window.MyFitRestAudio.resetCountdownAudio();
     }
+    clearStopwatchTicker();
     stopwatchSessionStarted = true;
     stopwatchRunning = true;
     stopwatchEndsAt = Date.now() + stopwatchRemainingMs;
@@ -2200,7 +2204,14 @@
 
   function welcomeOpenStopwatch() {
     // Standalone free countdown — leave workout/history alone; return to welcome on close.
-    openStopwatch({ fromWelcome: true });
+    // Debounce: HTML onclick + addEventListener can both fire on one tap.
+    if (stopwatchOpening) return;
+    stopwatchOpening = true;
+    try {
+      openStopwatch({ fromWelcome: true });
+    } finally {
+      setTimeout(function () { stopwatchOpening = false; }, 0);
+    }
   }
 
   function beginRest(kind, seconds) {

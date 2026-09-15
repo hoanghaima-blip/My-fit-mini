@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="47"'), 'version meta is 47');
-    assert(html.includes('data.js?v=47'), 'script cache bust v47');
+    assert(html.includes('myfit-version" content="48"'), 'version meta is 48');
+    assert(html.includes('data.js?v=48'), 'script cache bust v48');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,8 +617,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v47'), 'service worker cache v47');
-    assert(sw.includes('APP_VERSION = \'47\''), 'service worker APP_VERSION v47');
+    assert(sw.includes('my-fit-mini-v48'), 'service worker cache v48');
+    assert(sw.includes('APP_VERSION = \'48\''), 'service worker APP_VERSION v48');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
@@ -629,7 +629,7 @@ async function run() {
     assert(html.includes('open-stopwatch-btn'), 'home stopwatch entry');
     assert(html.includes('stopwatch-overlay'), 'stopwatch overlay in HTML');
     assert(html.includes('Đồng hồ bấm giờ'), 'stopwatch label in HTML');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v47 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v48 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }

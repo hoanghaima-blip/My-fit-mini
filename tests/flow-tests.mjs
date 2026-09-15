@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="48"'), 'version meta is 48');
-    assert(html.includes('data.js?v=48'), 'script cache bust v48');
+    assert(html.includes('myfit-version" content="50"'), 'version meta is 50');
+    assert(html.includes('data.js?v=50'), 'script cache bust v50');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,8 +617,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v48'), 'service worker cache v48');
-    assert(sw.includes('APP_VERSION = \'48\''), 'service worker APP_VERSION v48');
+    assert(sw.includes('my-fit-mini-v50'), 'service worker cache v50');
+    assert(sw.includes('APP_VERSION = \'50\''), 'service worker APP_VERSION v50');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
@@ -629,7 +629,7 @@ async function run() {
     assert(html.includes('open-stopwatch-btn'), 'home stopwatch entry');
     assert(html.includes('stopwatch-overlay'), 'stopwatch overlay in HTML');
     assert(html.includes('Đồng hồ bấm giờ'), 'stopwatch label in HTML');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v48 + workout management');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v50 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -2178,6 +2178,7 @@ async function run() {
     const { window, dom } = loadApp();
     const app = window.MyFitApp;
     const doc = window.document;
+    const css = readFileSync(join(root, 'styles.css'), 'utf8');
 
     assert(doc.getElementById('welcome-stopwatch-btn'), 'welcome has stopwatch button');
     assert(doc.getElementById('open-stopwatch-btn'), 'home has stopwatch button');
@@ -2189,11 +2190,24 @@ async function run() {
     assert(app.formatStopwatchMs(65000) === '01:05', 'format 65s');
     assert(app.formatStopwatchMs(3723000) === '1:02:03', 'format over 1 hour');
 
-    // Open from welcome — no workout session created
+    // Stacking: stopwatch must sit above welcome or tap looks like a no-op
+    const welcomeZ = Number((css.match(/\.welcome-screen\{[^}]*z-index:(\d+)/) || [])[1] || 0);
+    const stopwatchZ = Number((css.match(/\.stopwatch-screen\{z-index:(\d+)\}/) || [])[1] || 0);
+    assert(welcomeZ > 0 && stopwatchZ > welcomeZ, 'stopwatch z-index above welcome (' + stopwatchZ + '>' + welcomeZ + ')');
+
+    const historyBefore = (window.MyFitData.loadHistory && window.MyFitData.loadHistory()) || [];
+    const historyLenBefore = Array.isArray(historyBefore) ? historyBefore.length : 0;
+
+    // Real welcome button tap (not only direct API call)
     app.showWelcome();
-    app.welcomeOpenStopwatch();
+    const welcome = doc.getElementById('welcome-screen');
+    assert(welcome && !welcome.hidden, 'welcome visible before tap');
+    const welcomeBtn = doc.getElementById('welcome-stopwatch-btn');
+    welcomeBtn.click();
     const overlay = doc.getElementById('stopwatch-overlay');
-    assert(overlay.style.display === 'flex', 'stopwatch overlay visible');
+    assert(overlay.style.display === 'flex', 'welcome tap shows stopwatch overlay');
+    assert(welcome.hidden === true, 'welcome hidden while stopwatch open so it cannot block taps');
+    assert(Number(overlay.style.zIndex) >= 100, 'inline z-index set above welcome');
     assert(!app.getActiveSession(), 'stopwatch does not create workout session');
     assert(doc.getElementById('stopwatch-timer').textContent === '00:00', 'starts at 00:00');
     assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Bắt đầu', 'toggle label Bắt đầu');
@@ -2218,16 +2232,22 @@ async function run() {
     assert(doc.getElementById('stopwatch-timer').textContent === '00:00', 'reset shows 00:00');
     assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Bắt đầu', 'reset label Bắt đầu');
 
-    app.closeStopwatch();
+    doc.getElementById('stopwatch-close-btn').click();
     assert(overlay.style.display === 'none', 'close hides overlay');
+    assert(welcome && !welcome.hidden, 'close returns to welcome');
     assert(!app.getActiveSession(), 'still no workout session after stopwatch');
+    const historyAfter = (window.MyFitData.loadHistory && window.MyFitData.loadHistory()) || [];
+    assert(Array.isArray(historyAfter) && historyAfter.length === historyLenBefore, 'stopwatch does not write history');
 
-    // Home entry also opens standalone stopwatch
+    // Home entry also opens standalone stopwatch without toggling welcome back incorrectly
     app.welcomeOpenSchedule();
+    assert(welcome.hidden === true, 'schedule path hides welcome');
     app.openStopwatch();
     assert(overlay.style.display === 'flex', 'home openStopwatch shows overlay');
     assert(!app.getActiveSession(), 'home stopwatch still independent of workouts');
     app.closeStopwatch();
+    assert(welcome.hidden === true, 'closing home stopwatch does not force welcome');
+    assert(!doc.getElementById('app-home').hidden, 'still on home after home stopwatch close');
 
     dom.window.close();
     pass('TEST 40: standalone stopwatch independent of exercises');

@@ -16,6 +16,7 @@
   var stopwatchRunning = false;
   var stopwatchStartedAt = 0;
   var stopwatchElapsedMs = 0;
+  var stopwatchReturnToWelcome = false;
   var resumePromptShown = false;
   var formImageState = {
     edit: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
@@ -2014,9 +2015,20 @@
     stopwatchTimerId = setInterval(updateStopwatchDisplay, 200);
   }
 
-  function openStopwatch() {
+  function openStopwatch(options) {
+    options = options || {};
+    stopwatchReturnToWelcome = !!options.fromWelcome;
     updateStopwatchDisplay();
     updateStopwatchControls();
+    // Hide welcome so it cannot cover the stopwatch (z-index / stale CSS / PWA cache).
+    if (stopwatchReturnToWelcome && els.welcomeScreen) {
+      els.welcomeScreen.hidden = true;
+      setWelcomePageActive(true);
+    }
+    if (els.stopwatchOverlay) {
+      // Inline z-index beats stale cached stylesheets that still use z-index:40.
+      els.stopwatchOverlay.style.zIndex = '100';
+    }
     showOverlay(els.stopwatchOverlay, 'flex');
   }
 
@@ -2030,6 +2042,10 @@
       updateStopwatchDisplay();
     }
     hideOverlay(els.stopwatchOverlay);
+    if (stopwatchReturnToWelcome) {
+      stopwatchReturnToWelcome = false;
+      showWelcome();
+    }
   }
 
   function toggleStopwatch() {
@@ -2056,8 +2072,8 @@
   }
 
   function welcomeOpenStopwatch() {
-    // Standalone tool — leave welcome visible underneath; overlay covers it.
-    openStopwatch();
+    // Standalone tool — leave workout/history alone; return to welcome on close.
+    openStopwatch({ fromWelcome: true });
   }
 
   function beginRest(kind, seconds) {

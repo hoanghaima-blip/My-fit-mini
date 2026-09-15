@@ -12,6 +12,10 @@
   var pickJumpAfterInsert = false;
   var activeSession = D.loadActiveSession();
   var restTimerId = null;
+  var stopwatchTimerId = null;
+  var stopwatchRunning = false;
+  var stopwatchStartedAt = 0;
+  var stopwatchElapsedMs = 0;
   var resumePromptShown = false;
   var formImageState = {
     edit: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
@@ -154,7 +158,12 @@
     resistanceHistoryBtn: document.getElementById('w-resistance-history-btn'),
     resistanceHistoryOverlay: document.getElementById('resistance-history-overlay'),
     resistanceHistoryContent: document.getElementById('resistance-history-content'),
-    resistanceHistoryTitle: document.getElementById('resistance-history-title')
+    resistanceHistoryTitle: document.getElementById('resistance-history-title'),
+    stopwatchOverlay: document.getElementById('stopwatch-overlay'),
+    stopwatchTimer: document.getElementById('stopwatch-timer'),
+    stopwatchToggleBtn: document.getElementById('stopwatch-toggle-btn'),
+    stopwatchResetBtn: document.getElementById('stopwatch-reset-btn'),
+    stopwatchCloseBtn: document.getElementById('stopwatch-close-btn')
   };
 
   function persistLibrary() {
@@ -1963,6 +1972,94 @@
     hideOverlay(els.resistanceHistoryOverlay);
   }
 
+  function formatStopwatchMs(ms) {
+    var totalSeconds = Math.floor(Math.max(0, ms) / 1000);
+    var hours = Math.floor(totalSeconds / 3600);
+    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    var seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return (
+        String(hours) + ':' +
+        String(minutes).padStart(2, '0') + ':' +
+        String(seconds).padStart(2, '0')
+      );
+    }
+    return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+  }
+
+  function getStopwatchDisplayMs() {
+    if (!stopwatchRunning) return stopwatchElapsedMs;
+    return stopwatchElapsedMs + Math.max(0, Date.now() - stopwatchStartedAt);
+  }
+
+  function updateStopwatchDisplay() {
+    if (!els.stopwatchTimer) return;
+    els.stopwatchTimer.textContent = formatStopwatchMs(getStopwatchDisplayMs());
+  }
+
+  function updateStopwatchControls() {
+    if (!els.stopwatchToggleBtn) return;
+    els.stopwatchToggleBtn.textContent = stopwatchRunning ? 'Tạm dừng' : (stopwatchElapsedMs > 0 ? 'Tiếp tục' : 'Bắt đầu');
+  }
+
+  function clearStopwatchTicker() {
+    if (stopwatchTimerId) {
+      clearInterval(stopwatchTimerId);
+      stopwatchTimerId = null;
+    }
+  }
+
+  function startStopwatchTicker() {
+    clearStopwatchTicker();
+    stopwatchTimerId = setInterval(updateStopwatchDisplay, 200);
+  }
+
+  function openStopwatch() {
+    updateStopwatchDisplay();
+    updateStopwatchControls();
+    showOverlay(els.stopwatchOverlay, 'flex');
+  }
+
+  function closeStopwatch() {
+    // Keep elapsed time if paused; only hide the screen.
+    if (stopwatchRunning) {
+      stopwatchElapsedMs = getStopwatchDisplayMs();
+      stopwatchRunning = false;
+      clearStopwatchTicker();
+      updateStopwatchControls();
+      updateStopwatchDisplay();
+    }
+    hideOverlay(els.stopwatchOverlay);
+  }
+
+  function toggleStopwatch() {
+    if (stopwatchRunning) {
+      stopwatchElapsedMs = getStopwatchDisplayMs();
+      stopwatchRunning = false;
+      clearStopwatchTicker();
+    } else {
+      stopwatchRunning = true;
+      stopwatchStartedAt = Date.now();
+      startStopwatchTicker();
+    }
+    updateStopwatchControls();
+    updateStopwatchDisplay();
+  }
+
+  function resetStopwatch() {
+    stopwatchRunning = false;
+    stopwatchStartedAt = 0;
+    stopwatchElapsedMs = 0;
+    clearStopwatchTicker();
+    updateStopwatchControls();
+    updateStopwatchDisplay();
+  }
+
+  function welcomeOpenStopwatch() {
+    // Standalone tool — leave welcome visible underneath; overlay covers it.
+    openStopwatch();
+  }
+
   function beginRest(kind, seconds) {
     activeSession.phase = kind === 'set' ? 'rest-set' : 'rest-exercise';
     activeSession.restKind = kind;
@@ -2480,10 +2577,17 @@
 
     var welcomeScheduleBtn = document.getElementById('welcome-schedule-btn');
     var welcomeLibraryBtn = document.getElementById('welcome-library-btn');
+    var welcomeStopwatchBtn = document.getElementById('welcome-stopwatch-btn');
+    var openStopwatchBtn = document.getElementById('open-stopwatch-btn');
     var libraryBackBtn = document.getElementById('library-back-btn');
     var libraryToScheduleBtn = document.getElementById('library-to-schedule-btn');
     if (welcomeScheduleBtn) welcomeScheduleBtn.addEventListener('click', welcomeOpenSchedule);
     if (welcomeLibraryBtn) welcomeLibraryBtn.addEventListener('click', welcomeOpenLibrary);
+    if (welcomeStopwatchBtn) welcomeStopwatchBtn.addEventListener('click', welcomeOpenStopwatch);
+    if (openStopwatchBtn) openStopwatchBtn.addEventListener('click', openStopwatch);
+    if (els.stopwatchToggleBtn) els.stopwatchToggleBtn.addEventListener('click', toggleStopwatch);
+    if (els.stopwatchResetBtn) els.stopwatchResetBtn.addEventListener('click', resetStopwatch);
+    if (els.stopwatchCloseBtn) els.stopwatchCloseBtn.addEventListener('click', closeStopwatch);
     if (libraryBackBtn) libraryBackBtn.addEventListener('click', showWelcome);
     if (libraryToScheduleBtn) libraryToScheduleBtn.addEventListener('click', welcomeOpenSchedule);
   }
@@ -2557,6 +2661,13 @@
     showLibrary: showLibrary,
     welcomeOpenSchedule: welcomeOpenSchedule,
     welcomeOpenLibrary: welcomeOpenLibrary,
+    welcomeOpenStopwatch: welcomeOpenStopwatch,
+    openStopwatch: openStopwatch,
+    closeStopwatch: closeStopwatch,
+    toggleStopwatch: toggleStopwatch,
+    resetStopwatch: resetStopwatch,
+    formatStopwatchMs: formatStopwatchMs,
+    getStopwatchDisplayMs: getStopwatchDisplayMs,
     moveDisplayedExercise: moveDisplayedExercise,
     saveDisplayedOrderAsDefault: saveDisplayedOrderAsDefault,
     addExerciseToActiveSession: addExerciseToActiveSession,

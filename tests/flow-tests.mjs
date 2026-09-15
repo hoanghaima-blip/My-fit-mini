@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="43"'), 'version meta is 43');
-    assert(html.includes('data.js?v=43'), 'script cache bust v43');
+    assert(html.includes('myfit-version" content="47"'), 'version meta is 47');
+    assert(html.includes('data.js?v=47'), 'script cache bust v47');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,15 +617,19 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v43'), 'service worker cache v43');
-    assert(sw.includes('APP_VERSION = \'43\''), 'service worker APP_VERSION v43');
+    assert(sw.includes('my-fit-mini-v47'), 'service worker cache v47');
+    assert(sw.includes('APP_VERSION = \'47\''), 'service worker APP_VERSION v47');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
     assert(!html.includes('welcome-quote'), 'welcome quote removed');
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v43 + workout management');
+    assert(html.includes('welcome-stopwatch-btn'), 'welcome stopwatch entry');
+    assert(html.includes('open-stopwatch-btn'), 'home stopwatch entry');
+    assert(html.includes('stopwatch-overlay'), 'stopwatch overlay in HTML');
+    assert(html.includes('Đồng hồ bấm giờ'), 'stopwatch label in HTML');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v47 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -2166,6 +2170,69 @@ async function run() {
     pass('TEST 38: muscle group config filter library pick edit image preserved');
   } catch (err) {
     fail('TEST 38', err);
+  }
+
+  // TEST 40: standalone stopwatch — no exercise link
+  try {
+    resetStorage();
+    const { window, dom } = loadApp();
+    const app = window.MyFitApp;
+    const doc = window.document;
+
+    assert(doc.getElementById('welcome-stopwatch-btn'), 'welcome has stopwatch button');
+    assert(doc.getElementById('open-stopwatch-btn'), 'home has stopwatch button');
+    assert(doc.getElementById('stopwatch-overlay'), 'stopwatch overlay exists');
+    assert(typeof app.openStopwatch === 'function', 'openStopwatch exported');
+    assert(typeof app.toggleStopwatch === 'function', 'toggleStopwatch exported');
+    assert(typeof app.resetStopwatch === 'function', 'resetStopwatch exported');
+    assert(app.formatStopwatchMs(0) === '00:00', 'format 0');
+    assert(app.formatStopwatchMs(65000) === '01:05', 'format 65s');
+    assert(app.formatStopwatchMs(3723000) === '1:02:03', 'format over 1 hour');
+
+    // Open from welcome — no workout session created
+    app.showWelcome();
+    app.welcomeOpenStopwatch();
+    const overlay = doc.getElementById('stopwatch-overlay');
+    assert(overlay.style.display === 'flex', 'stopwatch overlay visible');
+    assert(!app.getActiveSession(), 'stopwatch does not create workout session');
+    assert(doc.getElementById('stopwatch-timer').textContent === '00:00', 'starts at 00:00');
+    assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Bắt đầu', 'toggle label Bắt đầu');
+
+    app.toggleStopwatch();
+    assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Tạm dừng', 'running shows Tạm dừng');
+    await wait(250);
+    assert(app.getStopwatchDisplayMs() >= 200, 'elapsed advances while running');
+    app.toggleStopwatch();
+    const paused = app.getStopwatchDisplayMs();
+    assert(paused > 0, 'paused keeps elapsed');
+    assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Tiếp tục', 'paused shows Tiếp tục');
+    await wait(220);
+    assert(Math.abs(app.getStopwatchDisplayMs() - paused) < 50, 'elapsed frozen while paused');
+
+    app.toggleStopwatch();
+    await wait(220);
+    assert(app.getStopwatchDisplayMs() > paused, 'resume continues counting');
+
+    app.resetStopwatch();
+    assert(app.getStopwatchDisplayMs() === 0, 'reset clears elapsed');
+    assert(doc.getElementById('stopwatch-timer').textContent === '00:00', 'reset shows 00:00');
+    assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Bắt đầu', 'reset label Bắt đầu');
+
+    app.closeStopwatch();
+    assert(overlay.style.display === 'none', 'close hides overlay');
+    assert(!app.getActiveSession(), 'still no workout session after stopwatch');
+
+    // Home entry also opens standalone stopwatch
+    app.welcomeOpenSchedule();
+    app.openStopwatch();
+    assert(overlay.style.display === 'flex', 'home openStopwatch shows overlay');
+    assert(!app.getActiveSession(), 'home stopwatch still independent of workouts');
+    app.closeStopwatch();
+
+    dom.window.close();
+    pass('TEST 40: standalone stopwatch independent of exercises');
+  } catch (err) {
+    fail('TEST 40', err);
   }
 
   console.log('\nMy Fit Mini Test Results');

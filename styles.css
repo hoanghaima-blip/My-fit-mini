@@ -112,3 +112,11 @@ html.welcome-active,html.welcome-active body{background:#ebe4da}
 .muscle-filter-compact .muscle-filter-row{margin-bottom:8px}
 .muscle-filter-empty{color:#777;font-size:14px;padding:8px 0}
 .muscle-tag.sub{background:#ebe9e5;color:#333}
+
+/* Standalone stopwatch (same visual language as rest timer) */
+.stopwatch-screen{z-index:40}
+.stopwatch-inner{position:relative;width:100%;max-width:760px;margin:0 auto;padding-top:calc(12px + env(safe-area-inset-top,0px))}
+.stopwatch-close{position:absolute;top:calc(4px + env(safe-area-inset-top,0px));right:0;border:0;background:#eeece8;color:#222;border-radius:50%;width:44px;height:44px;font-size:28px;line-height:1;font-weight:700;cursor:pointer}
+.stopwatch-actions{margin-top:8px}
+.hero .btn-secondary{margin-top:10px}
+.welcome-btn-secondary + .welcome-btn-secondary{margin-top:0}

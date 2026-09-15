@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#222222">
-<meta name="myfit-version" content="49">
+<meta name="myfit-version" content="50">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=49">
-<link rel="icon" href="assets/icon-192.png?v=49">
-<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=49">
+<link rel="stylesheet" href="styles.css?v=50">
+<link rel="icon" href="assets/icon-192.png?v=50">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=50">
 <title>My Fit Mini</title>
 <script>
 /* Force one-time PWA cache refresh when UI version changes.
    Preserves workout/history localStorage and IndexedDB image data. */
 (function () {
-  var EXPECTED = '49';
+  var EXPECTED = '50';
   var VERSION_KEY = 'myfit-ui-version';
-  var RELOAD_KEY = 'myfit-ui-reload-v49';
+  var RELOAD_KEY = 'myfit-ui-reload-v50';
   try {
     var current = localStorage.getItem(VERSION_KEY);
     if (current === EXPECTED) return;
@@ -481,9 +481,9 @@
   </div>
 </div>
 
-<script src="data.js?v=49"></script>
-<script src="images.js?v=49"></script>
-<script src="rest-audio.js?v=49"></script>
-<script src="app.js?v=49"></script>
+<script src="data.js?v=50"></script>
+<script src="images.js?v=50"></script>
+<script src="rest-audio.js?v=50"></script>
+<script src="app.js?v=50"></script>
 </body>
 </html>

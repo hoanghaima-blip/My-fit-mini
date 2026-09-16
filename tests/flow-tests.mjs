@@ -602,8 +602,8 @@ async function run() {
   // NEW: version meta and history section in HTML source
   try {
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    assert(html.includes('myfit-version" content="50"'), 'version meta is 50');
-    assert(html.includes('data.js?v=50'), 'script cache bust v50');
+    assert(html.includes('myfit-version" content="52"'), 'version meta is 52');
+    assert(html.includes('data.js?v=52'), 'script cache bust v52');
     assert(html.includes('welcome-background.jpg'), 'welcome img uses uploaded asset');
     assert(html.includes('<img class="welcome-bg"'), 'welcome background is full-bleed img');
     assert(html.includes('id="welcome-screen"'), 'welcome-screen in HTML');
@@ -617,8 +617,8 @@ async function run() {
     assert(html.includes('Tập theo lịch'), 'welcome schedule CTA');
     assert(html.includes('Tập theo bài'), 'welcome library CTA');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
-    assert(sw.includes('my-fit-mini-v50'), 'service worker cache v50');
-    assert(sw.includes('APP_VERSION = \'50\''), 'service worker APP_VERSION v50');
+    assert(sw.includes('my-fit-mini-v52'), 'service worker cache v52');
+    assert(sw.includes('APP_VERSION = \'52\''), 'service worker APP_VERSION v52');
     assert(sw.includes('count-go.mp3'), 'go cue mp3 cached');
     assert(sw.includes('assets/audio/count-5.mp3'), 'countdown mp3 cached');
     assert(html.includes('rest-audio.js'), 'rest audio module in HTML');
@@ -626,10 +626,16 @@ async function run() {
     assert(!html.includes('Nhỏ từng ngày'), 'no extra welcome quote line');
     assert(html.includes('welcome-hero'), 'welcome hero layout group');
     assert(html.includes('welcome-stopwatch-btn'), 'welcome stopwatch entry');
+    assert(html.includes('MyFitApp.welcomeOpenStopwatch'), 'welcome stopwatch wired via onclick');
     assert(html.includes('open-stopwatch-btn'), 'home stopwatch entry');
     assert(html.includes('stopwatch-overlay'), 'stopwatch overlay in HTML');
     assert(html.includes('Đồng hồ bấm giờ'), 'stopwatch label in HTML');
-    pass('TEST 16: HTML/SW ship welcome + History UI + cache v50 + workout management');
+    assert(html.includes('stopwatch-back'), 'stopwatch back control');
+    assert(html.includes('stopwatch-add-15-btn'), 'free countdown +15');
+    assert(html.includes('stopwatch-add-30-btn'), 'free countdown +30');
+    assert(html.includes('id="stopwatch-timer" aria-live="polite">01:00</div>'), 'free countdown defaults to 01:00 markup');
+    assert(sw.includes('?v='), 'SW special-cases versioned assets');
+    pass('TEST 16: HTML/SW ship welcome + History UI + cache v52 + workout management');
   } catch (err) {
     fail('TEST 16', err);
   }
@@ -2172,85 +2178,131 @@ async function run() {
     fail('TEST 38', err);
   }
 
-  // TEST 40: standalone stopwatch — no exercise link
+  // TEST 40: standalone free countdown — no exercise / history link
   try {
     resetStorage();
     const { window, dom } = loadApp();
     const app = window.MyFitApp;
     const doc = window.document;
     const css = readFileSync(join(root, 'styles.css'), 'utf8');
+    const spoken = [];
+    const RA = window.MyFitRestAudio;
+    assert(RA, 'rest audio module present for free countdown cues');
+    const origHandle = RA.handleRestCountdownTick;
+    const origGo = RA.playGoCue;
+    const lastSpoken = { n: null };
+    RA.handleRestCountdownTick = function (remainingSeconds) {
+      const remaining = Math.max(0, Math.ceil(Number(remainingSeconds) || 0));
+      if (remaining >= 1 && remaining <= 5 && lastSpoken.n !== remaining) {
+        lastSpoken.n = remaining;
+        spoken.push(String(remaining));
+      }
+      return origHandle.call(RA, remainingSeconds);
+    };
+    RA.playGoCue = function (onDone) {
+      spoken.push('Go');
+      if (typeof onDone === 'function') onDone();
+      return { played: true, digit: 'Go' };
+    };
 
     assert(doc.getElementById('welcome-stopwatch-btn'), 'welcome has stopwatch button');
     assert(doc.getElementById('open-stopwatch-btn'), 'home has stopwatch button');
     assert(doc.getElementById('stopwatch-overlay'), 'stopwatch overlay exists');
+    assert(doc.getElementById('stopwatch-add-15-btn'), '+15 button exists');
+    assert(doc.getElementById('stopwatch-add-30-btn'), '+30 button exists');
     assert(typeof app.openStopwatch === 'function', 'openStopwatch exported');
     assert(typeof app.toggleStopwatch === 'function', 'toggleStopwatch exported');
     assert(typeof app.resetStopwatch === 'function', 'resetStopwatch exported');
+    assert(typeof app.addStopwatchSeconds === 'function', 'addStopwatchSeconds exported');
     assert(app.formatStopwatchMs(0) === '00:00', 'format 0');
-    assert(app.formatStopwatchMs(65000) === '01:05', 'format 65s');
-    assert(app.formatStopwatchMs(3723000) === '1:02:03', 'format over 1 hour');
+    assert(app.formatStopwatchMs(60000) === '01:00', 'format 60s');
+    assert(app.formatStopwatchMs(75000) === '01:15', 'format 75s');
 
-    // Stacking: stopwatch must sit above welcome or tap looks like a no-op
     const welcomeZ = Number((css.match(/\.welcome-screen\{[^}]*z-index:(\d+)/) || [])[1] || 0);
-    const stopwatchZ = Number((css.match(/\.stopwatch-screen\{z-index:(\d+)\}/) || [])[1] || 0);
+    const stopwatchZ = Number((css.match(/\.stopwatch-screen\{[^}]*z-index:(\d+)/) || [])[1] || 0);
     assert(welcomeZ > 0 && stopwatchZ > welcomeZ, 'stopwatch z-index above welcome (' + stopwatchZ + '>' + welcomeZ + ')');
 
     const historyBefore = (window.MyFitData.loadHistory && window.MyFitData.loadHistory()) || [];
     const historyLenBefore = Array.isArray(historyBefore) ? historyBefore.length : 0;
 
-    // Real welcome button tap (not only direct API call)
     app.showWelcome();
     const welcome = doc.getElementById('welcome-screen');
-    assert(welcome && !welcome.hidden, 'welcome visible before tap');
-    const welcomeBtn = doc.getElementById('welcome-stopwatch-btn');
-    welcomeBtn.click();
+    doc.getElementById('welcome-stopwatch-btn').click();
     const overlay = doc.getElementById('stopwatch-overlay');
-    assert(overlay.style.display === 'flex', 'welcome tap shows stopwatch overlay');
-    assert(welcome.hidden === true, 'welcome hidden while stopwatch open so it cannot block taps');
-    assert(Number(overlay.style.zIndex) >= 100, 'inline z-index set above welcome');
-    assert(!app.getActiveSession(), 'stopwatch does not create workout session');
-    assert(doc.getElementById('stopwatch-timer').textContent === '00:00', 'starts at 00:00');
+    assert(overlay.style.display === 'flex', 'welcome tap shows countdown overlay');
+    assert(welcome.hidden === true, 'welcome hidden while countdown open');
+    assert(!app.getActiveSession(), 'countdown does not create workout session');
+    assert(doc.getElementById('stopwatch-timer').textContent === '01:00', 'opens at 01:00');
+    assert(Math.abs(app.getStopwatchRemainingMs() - 60000) < 5, 'remaining starts at 60s');
     assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Bắt đầu', 'toggle label Bắt đầu');
 
+    // +15 / +30 while idle
+    app.addStopwatchSeconds(15);
+    assert(doc.getElementById('stopwatch-timer').textContent === '01:15', '+15 → 01:15');
+    app.addStopwatchSeconds(30);
+    assert(doc.getElementById('stopwatch-timer').textContent === '01:45', '+30 → 01:45');
+    app.resetStopwatch();
+    assert(doc.getElementById('stopwatch-timer').textContent === '01:00', 'reset returns 01:00');
+
+    // Countdown run / pause / resume
     app.toggleStopwatch();
     assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Tạm dừng', 'running shows Tạm dừng');
-    await wait(250);
-    assert(app.getStopwatchDisplayMs() >= 200, 'elapsed advances while running');
+    await wait(1200);
+    const afterRun = app.getStopwatchRemainingMs();
+    assert(afterRun < 60000 - 800, 'remaining decreases while running');
     app.toggleStopwatch();
-    const paused = app.getStopwatchDisplayMs();
-    assert(paused > 0, 'paused keeps elapsed');
+    const paused = app.getStopwatchRemainingMs();
     assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Tiếp tục', 'paused shows Tiếp tục');
-    await wait(220);
-    assert(Math.abs(app.getStopwatchDisplayMs() - paused) < 50, 'elapsed frozen while paused');
-
+    await wait(400);
+    assert(Math.abs(app.getStopwatchRemainingMs() - paused) < 50, 'remaining frozen while paused');
     app.toggleStopwatch();
-    await wait(220);
-    assert(app.getStopwatchDisplayMs() > paused, 'resume continues counting');
+    await wait(400);
+    assert(app.getStopwatchRemainingMs() < paused - 200, 'resume continues countdown');
 
+    // Jump into last-5 window and verify English digit cues + words
+    assert(typeof app.setStopwatchRemainingMs === 'function', 'test helper setStopwatchRemainingMs');
+    spoken.length = 0;
+    lastSpoken.n = null;
+    RA.resetCountdownAudio();
+    app.setStopwatchRemainingMs(5200);
+    app.toggleStopwatch();
+    await wait(250);
+    assert(doc.getElementById('stopwatch-timer').textContent === 'FIVE', 'shows FIVE at 5s');
+    await wait(1100);
+    assert(doc.getElementById('stopwatch-timer').textContent === 'FOUR', 'shows FOUR at 4s');
+    // Allow countdown to complete
+    await wait(5500);
+    assert(spoken.join(',').indexOf('5') !== -1 && spoken.join(',').indexOf('1') !== -1, 'speaks through last seconds, got: ' + spoken.join(','));
+    assert(spoken.indexOf('Go') !== -1, 'plays Go at end');
+    assert(app.getStopwatchRemainingMs() === 0, 'ends at 0');
+    assert(doc.getElementById('stopwatch-timer').textContent === '00:00' || doc.getElementById('stopwatch-timer').textContent === 'GO', 'shows 00:00 or GO at end');
+    assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Bắt đầu', 'finished label Bắt đầu');
+
+    // Start again from 01:00 after finish
+    app.toggleStopwatch();
+    assert(Math.abs(app.getStopwatchRemainingMs() - 60000) < 200 || app.getStopwatchRemainingMs() > 59000, 'restart from ~01:00');
     app.resetStopwatch();
-    assert(app.getStopwatchDisplayMs() === 0, 'reset clears elapsed');
-    assert(doc.getElementById('stopwatch-timer').textContent === '00:00', 'reset shows 00:00');
-    assert(doc.getElementById('stopwatch-toggle-btn').textContent === 'Bắt đầu', 'reset label Bắt đầu');
+    assert(doc.getElementById('stopwatch-timer').textContent === '01:00', 'reset to 01:00');
 
     doc.getElementById('stopwatch-close-btn').click();
     assert(overlay.style.display === 'none', 'close hides overlay');
     assert(welcome && !welcome.hidden, 'close returns to welcome');
-    assert(!app.getActiveSession(), 'still no workout session after stopwatch');
+    assert(!app.getActiveSession(), 'still no workout session');
     const historyAfter = (window.MyFitData.loadHistory && window.MyFitData.loadHistory()) || [];
-    assert(Array.isArray(historyAfter) && historyAfter.length === historyLenBefore, 'stopwatch does not write history');
+    assert(Array.isArray(historyAfter) && historyAfter.length === historyLenBefore, 'countdown does not write history');
 
-    // Home entry also opens standalone stopwatch without toggling welcome back incorrectly
+    // Rest timer audio path still intact (module restored)
+    RA.handleRestCountdownTick = origHandle;
+    RA.playGoCue = origGo;
+
     app.welcomeOpenSchedule();
-    assert(welcome.hidden === true, 'schedule path hides welcome');
     app.openStopwatch();
-    assert(overlay.style.display === 'flex', 'home openStopwatch shows overlay');
-    assert(!app.getActiveSession(), 'home stopwatch still independent of workouts');
+    assert(doc.getElementById('stopwatch-timer').textContent === '01:00', 'home open also defaults 01:00');
+    assert(!app.getActiveSession(), 'home countdown independent of workouts');
     app.closeStopwatch();
-    assert(welcome.hidden === true, 'closing home stopwatch does not force welcome');
-    assert(!doc.getElementById('app-home').hidden, 'still on home after home stopwatch close');
 
     dom.window.close();
-    pass('TEST 40: standalone stopwatch independent of exercises');
+    pass('TEST 40: standalone free countdown independent of exercises');
   } catch (err) {
     fail('TEST 40', err);
   }

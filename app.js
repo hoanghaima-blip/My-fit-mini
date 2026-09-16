@@ -14,9 +14,14 @@
   var restTimerId = null;
   var stopwatchTimerId = null;
   var stopwatchRunning = false;
-  var stopwatchStartedAt = 0;
-  var stopwatchElapsedMs = 0;
   var stopwatchReturnToWelcome = false;
+  var STOPWATCH_DEFAULT_MS = 60000;
+  var stopwatchRemainingMs = STOPWATCH_DEFAULT_MS;
+  var stopwatchEndsAt = 0;
+  var stopwatchFinished = false;
+  var stopwatchSessionStarted = false;
+  var stopwatchShowGoLabel = false;
+  var stopwatchOpening = false;
   var resumePromptShown = false;
   var formImageState = {
     edit: { pendingFile: null, clearImage: false, existingImageId: '', existingImage: '', previewUrl: '' },
@@ -164,6 +169,8 @@
     stopwatchTimer: document.getElementById('stopwatch-timer'),
     stopwatchToggleBtn: document.getElementById('stopwatch-toggle-btn'),
     stopwatchResetBtn: document.getElementById('stopwatch-reset-btn'),
+    stopwatchAdd15Btn: document.getElementById('stopwatch-add-15-btn'),
+    stopwatchAdd30Btn: document.getElementById('stopwatch-add-30-btn'),
     stopwatchCloseBtn: document.getElementById('stopwatch-close-btn')
   };
 
@@ -190,12 +197,15 @@
   }
 
   function hideOverlay(el) {
-    if (el) el.style.display = 'none';
+    if (!el) return;
+    el.style.display = 'none';
+    el.style.pointerEvents = 'none';
   }
 
   function showOverlay(el, mode) {
     if (!el) return;
     el.style.display = mode || 'flex';
+    el.style.pointerEvents = 'auto';
   }
 
   function persistWorkouts() {
@@ -1973,34 +1983,62 @@
     hideOverlay(els.resistanceHistoryOverlay);
   }
 
+  var STOPWATCH_WORD = {
+    5: 'FIVE',
+    4: 'FOUR',
+    3: 'THREE',
+    2: 'TWO',
+    1: 'ONE'
+  };
+
   function formatStopwatchMs(ms) {
-    var totalSeconds = Math.floor(Math.max(0, ms) / 1000);
-    var hours = Math.floor(totalSeconds / 3600);
-    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    var totalSeconds = Math.max(0, Math.ceil(Math.max(0, ms) / 1000));
+    if (ms <= 0) totalSeconds = 0;
+    var minutes = Math.floor(totalSeconds / 60);
     var seconds = totalSeconds % 60;
-    if (hours > 0) {
-      return (
-        String(hours) + ':' +
-        String(minutes).padStart(2, '0') + ':' +
-        String(seconds).padStart(2, '0')
-      );
-    }
     return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
   }
 
-  function getStopwatchDisplayMs() {
-    if (!stopwatchRunning) return stopwatchElapsedMs;
-    return stopwatchElapsedMs + Math.max(0, Date.now() - stopwatchStartedAt);
+  function getStopwatchRemainingMs() {
+    if (!stopwatchRunning) return Math.max(0, stopwatchRemainingMs);
+    return Math.max(0, stopwatchEndsAt - Date.now());
+  }
+
+  function getStopwatchDisplaySeconds() {
+    var ms = getStopwatchRemainingMs();
+    if (ms <= 0) return 0;
+    return Math.max(0, Math.ceil(ms / 1000));
   }
 
   function updateStopwatchDisplay() {
     if (!els.stopwatchTimer) return;
-    els.stopwatchTimer.textContent = formatStopwatchMs(getStopwatchDisplayMs());
+    var secs = getStopwatchDisplaySeconds();
+    var ms = getStopwatchRemainingMs();
+    if (stopwatchShowGoLabel) {
+      els.stopwatchTimer.textContent = 'GO';
+      els.stopwatchTimer.classList.add('stopwatch-final-count');
+      return;
+    }
+    if (secs >= 1 && secs <= 5 && (stopwatchRunning || stopwatchSessionStarted)) {
+      els.stopwatchTimer.textContent = STOPWATCH_WORD[secs] || formatStopwatchMs(ms);
+      els.stopwatchTimer.classList.add('stopwatch-final-count');
+      return;
+    }
+    els.stopwatchTimer.classList.remove('stopwatch-final-count');
+    els.stopwatchTimer.textContent = formatStopwatchMs(ms);
   }
 
   function updateStopwatchControls() {
     if (!els.stopwatchToggleBtn) return;
-    els.stopwatchToggleBtn.textContent = stopwatchRunning ? 'Tạm dừng' : (stopwatchElapsedMs > 0 ? 'Tiếp tục' : 'Bắt đầu');
+    if (stopwatchRunning) {
+      els.stopwatchToggleBtn.textContent = 'Tạm dừng';
+      return;
+    }
+    if (stopwatchSessionStarted && getStopwatchRemainingMs() > 0 && !stopwatchFinished) {
+      els.stopwatchToggleBtn.textContent = 'Tiếp tục';
+      return;
+    }
+    els.stopwatchToggleBtn.textContent = 'Bắt đầu';
   }
 
   function clearStopwatchTicker() {
@@ -2010,14 +2048,73 @@
     }
   }
 
+  function syncFreeCountdownAudio(secs) {
+    // Only drive free-timer audio while the free countdown overlay is open.
+    // Rest-between-sets uses the same helper on its own tick path.
+    if (!window.MyFitRestAudio) return;
+    if (!els.stopwatchOverlay || els.stopwatchOverlay.style.display === 'none') return;
+    if (secs >= 1 && secs <= 5) {
+      window.MyFitRestAudio.handleRestCountdownTick(secs);
+    }
+  }
+
+  function tickFreeCountdown() {
+    if (!stopwatchRunning) return;
+    var ms = getStopwatchRemainingMs();
+    var secs = getStopwatchDisplaySeconds();
+    updateStopwatchDisplay();
+    if (ms <= 0) {
+      finishFreeCountdown();
+      return;
+    }
+    syncFreeCountdownAudio(secs);
+  }
+
   function startStopwatchTicker() {
     clearStopwatchTicker();
-    stopwatchTimerId = setInterval(updateStopwatchDisplay, 200);
+    stopwatchTimerId = setInterval(tickFreeCountdown, 200);
+  }
+
+  function finishFreeCountdown() {
+    if (stopwatchFinished && !stopwatchRunning) return;
+    stopwatchRunning = false;
+    stopwatchRemainingMs = 0;
+    stopwatchFinished = true;
+    stopwatchSessionStarted = false;
+    clearStopwatchTicker();
+    stopwatchShowGoLabel = true;
+    updateStopwatchDisplay();
+    updateStopwatchControls();
+    var afterGo = function () {
+      stopwatchShowGoLabel = false;
+      updateStopwatchDisplay();
+      updateStopwatchControls();
+    };
+    if (window.MyFitRestAudio && window.MyFitRestAudio.playGoCue) {
+      window.MyFitRestAudio.playGoCue(afterGo);
+    } else {
+      afterGo();
+    }
+  }
+
+  function resetFreeCountdownState() {
+    stopwatchRunning = false;
+    stopwatchRemainingMs = STOPWATCH_DEFAULT_MS;
+    stopwatchEndsAt = 0;
+    stopwatchFinished = false;
+    stopwatchSessionStarted = false;
+    stopwatchShowGoLabel = false;
+    clearStopwatchTicker();
+    if (window.MyFitRestAudio) window.MyFitRestAudio.resetCountdownAudio();
   }
 
   function openStopwatch(options) {
-    options = options || {};
+    // Guard: addEventListener may pass a click Event as the first arg.
+    if (!options || typeof options !== 'object' || options instanceof Event || options.type === 'click') {
+      options = {};
+    }
     stopwatchReturnToWelcome = !!options.fromWelcome;
+    resetFreeCountdownState();
     updateStopwatchDisplay();
     updateStopwatchControls();
     // Hide welcome so it cannot cover the stopwatch (z-index / stale CSS / PWA cache).
@@ -2028,19 +2125,24 @@
     if (els.stopwatchOverlay) {
       // Inline z-index beats stale cached stylesheets that still use z-index:40.
       els.stopwatchOverlay.style.zIndex = '100';
+      els.stopwatchOverlay.style.pointerEvents = 'auto';
     }
     showOverlay(els.stopwatchOverlay, 'flex');
   }
 
   function closeStopwatch() {
-    // Keep elapsed time if paused; only hide the screen.
     if (stopwatchRunning) {
-      stopwatchElapsedMs = getStopwatchDisplayMs();
+      stopwatchRemainingMs = getStopwatchRemainingMs();
       stopwatchRunning = false;
       clearStopwatchTicker();
-      updateStopwatchControls();
-      updateStopwatchDisplay();
     }
+    // Stop free-timer cues only; do not touch an active workout rest session path.
+    if (window.MyFitRestAudio && (!activeSession || (activeSession.phase !== 'rest-set' && activeSession.phase !== 'rest-exercise'))) {
+      window.MyFitRestAudio.stopRestCountdownAudio();
+    }
+    stopwatchShowGoLabel = false;
+    updateStopwatchControls();
+    updateStopwatchDisplay();
     hideOverlay(els.stopwatchOverlay);
     if (stopwatchReturnToWelcome) {
       stopwatchReturnToWelcome = false;
@@ -2050,30 +2152,66 @@
 
   function toggleStopwatch() {
     if (stopwatchRunning) {
-      stopwatchElapsedMs = getStopwatchDisplayMs();
+      stopwatchRemainingMs = getStopwatchRemainingMs();
       stopwatchRunning = false;
       clearStopwatchTicker();
-    } else {
-      stopwatchRunning = true;
-      stopwatchStartedAt = Date.now();
-      startStopwatchTicker();
+      updateStopwatchControls();
+      updateStopwatchDisplay();
+      return;
     }
+    if (stopwatchFinished || getStopwatchRemainingMs() <= 0) {
+      stopwatchRemainingMs = STOPWATCH_DEFAULT_MS;
+      stopwatchFinished = false;
+      stopwatchShowGoLabel = false;
+      if (window.MyFitRestAudio) window.MyFitRestAudio.resetCountdownAudio();
+    }
+    clearStopwatchTicker();
+    stopwatchSessionStarted = true;
+    stopwatchRunning = true;
+    stopwatchEndsAt = Date.now() + stopwatchRemainingMs;
+    if (window.MyFitRestAudio) window.MyFitRestAudio.unlockRestAudio();
+    startStopwatchTicker();
+    tickFreeCountdown();
     updateStopwatchControls();
-    updateStopwatchDisplay();
   }
 
   function resetStopwatch() {
-    stopwatchRunning = false;
-    stopwatchStartedAt = 0;
-    stopwatchElapsedMs = 0;
-    clearStopwatchTicker();
+    resetFreeCountdownState();
     updateStopwatchControls();
     updateStopwatchDisplay();
   }
 
+  function addStopwatchSeconds(seconds) {
+    var addMs = Math.max(0, Number(seconds) || 0) * 1000;
+    if (!addMs) return;
+    var current = getStopwatchRemainingMs();
+    if (stopwatchFinished) {
+      stopwatchFinished = false;
+      stopwatchSessionStarted = false;
+      stopwatchShowGoLabel = false;
+      current = 0;
+    }
+    stopwatchRemainingMs = current + addMs;
+    if (stopwatchRunning) {
+      stopwatchEndsAt = Date.now() + stopwatchRemainingMs;
+    }
+    // Leaving/re-entering the last-5 window should re-announce digits.
+    if (window.MyFitRestAudio) window.MyFitRestAudio.resetCountdownAudio();
+    updateStopwatchDisplay();
+    updateStopwatchControls();
+    if (stopwatchRunning) syncFreeCountdownAudio(getStopwatchDisplaySeconds());
+  }
+
   function welcomeOpenStopwatch() {
-    // Standalone tool — leave workout/history alone; return to welcome on close.
-    openStopwatch({ fromWelcome: true });
+    // Standalone free countdown — leave workout/history alone; return to welcome on close.
+    // Debounce: HTML onclick + addEventListener can both fire on one tap.
+    if (stopwatchOpening) return;
+    stopwatchOpening = true;
+    try {
+      openStopwatch({ fromWelcome: true });
+    } finally {
+      setTimeout(function () { stopwatchOpening = false; }, 0);
+    }
   }
 
   function beginRest(kind, seconds) {
@@ -2601,10 +2739,26 @@
     var libraryToScheduleBtn = document.getElementById('library-to-schedule-btn');
     if (welcomeScheduleBtn) welcomeScheduleBtn.addEventListener('click', welcomeOpenSchedule);
     if (welcomeLibraryBtn) welcomeLibraryBtn.addEventListener('click', welcomeOpenLibrary);
-    if (welcomeStopwatchBtn) welcomeStopwatchBtn.addEventListener('click', welcomeOpenStopwatch);
-    if (openStopwatchBtn) openStopwatchBtn.addEventListener('click', openStopwatch);
+    // Direct listeners + HTML onclick backup; ignore event object if passed as options.
+    if (welcomeStopwatchBtn) {
+      welcomeStopwatchBtn.addEventListener('click', function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        welcomeOpenStopwatch();
+      });
+    }
+    if (openStopwatchBtn) {
+      openStopwatchBtn.addEventListener('click', function () {
+        openStopwatch();
+      });
+    }
     if (els.stopwatchToggleBtn) els.stopwatchToggleBtn.addEventListener('click', toggleStopwatch);
     if (els.stopwatchResetBtn) els.stopwatchResetBtn.addEventListener('click', resetStopwatch);
+    if (els.stopwatchAdd15Btn) {
+      els.stopwatchAdd15Btn.addEventListener('click', function () { addStopwatchSeconds(15); });
+    }
+    if (els.stopwatchAdd30Btn) {
+      els.stopwatchAdd30Btn.addEventListener('click', function () { addStopwatchSeconds(30); });
+    }
     if (els.stopwatchCloseBtn) els.stopwatchCloseBtn.addEventListener('click', closeStopwatch);
     if (libraryBackBtn) libraryBackBtn.addEventListener('click', showWelcome);
     if (libraryToScheduleBtn) libraryToScheduleBtn.addEventListener('click', welcomeOpenSchedule);
@@ -2684,8 +2838,22 @@
     closeStopwatch: closeStopwatch,
     toggleStopwatch: toggleStopwatch,
     resetStopwatch: resetStopwatch,
+    addStopwatchSeconds: addStopwatchSeconds,
     formatStopwatchMs: formatStopwatchMs,
-    getStopwatchDisplayMs: getStopwatchDisplayMs,
+    getStopwatchDisplayMs: getStopwatchRemainingMs,
+    getStopwatchRemainingMs: getStopwatchRemainingMs,
+    setStopwatchRemainingMs: function (ms) {
+      stopwatchRunning = false;
+      clearStopwatchTicker();
+      stopwatchRemainingMs = Math.max(0, Number(ms) || 0);
+      stopwatchEndsAt = 0;
+      stopwatchFinished = stopwatchRemainingMs <= 0;
+      stopwatchSessionStarted = stopwatchRemainingMs > 0 && stopwatchRemainingMs < STOPWATCH_DEFAULT_MS;
+      stopwatchShowGoLabel = false;
+      if (window.MyFitRestAudio) window.MyFitRestAudio.resetCountdownAudio();
+      updateStopwatchControls();
+      updateStopwatchDisplay();
+    },
     moveDisplayedExercise: moveDisplayedExercise,
     saveDisplayedOrderAsDefault: saveDisplayedOrderAsDefault,
     addExerciseToActiveSession: addExerciseToActiveSession,
